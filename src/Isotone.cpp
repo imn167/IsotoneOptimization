@@ -4,6 +4,7 @@
 # include <set>
 # include <algorithm>
 # include <iterator>
+# include <vector>
 using namespace Rcpp;
 using namespace std;
 
@@ -371,60 +372,79 @@ public:
 
 class orderedBlock {
 public:
-  orderedBlock(int size, double* y = NULL, double* w = NULL) {
+  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>() ) {
     n = size;
-    xl = new double[n];
-    calibrated_xl = new double[n];
-    weights = new double[n];
-    if (w != NULL) {
-      weighted = true;
+    xl.resize(n);
+    calibrated_xl.resize(n);
+    weights.resize(n);
+
+    weighted = !w.empty();
+
+    // if (w != NULL) {
+    //   weighted = true;
+    // }
+    // else {
+    //   weighted = false;
+    // }
+
+    if (!y.empty()) {
+      xl = y;
+      calibrated_xl = y;
+
     }
-    else {
-      weighted = false;
+
+    if (weighted) {
+      weights = w;
     }
-    if (y != NULL) {
-      for (int i = 0;i < n;i++) {
-        xl[i] = y[i];
-        calibrated_xl[i] = y[i];
-      }
-      if (weighted) {
-        for (int i = 0;i < n;i++) {
-          weights[i] = w[i];
-        }
-      }
-    }
+    
+    // if (y != NULL) {
+    //   for (int i = 0;i < n;i++) {
+    //     xl[i] = y[i];
+    //     calibrated_xl[i] = y[i];
+    //   }
+    //   if (weighted) {
+    //     for (int i = 0;i < n;i++) {
+    //       weights[i] = w[i];
+    //     }
+    //   }
+    // }
 
     str_DAG = DAG();
     str_DAG.initialize(n);
   }
-
-  ~orderedBlock() {
-    delete[]xl;
-    delete[]calibrated_xl;
-  }
+  // no destructor needed ! Everything auto-cleaned 
+  ~orderedBlock() = default; 
+  // ~orderedBlock() {
+  //   delete[]xl;
+  //   delete[]calibrated_xl;
+  // }
 
   void load_chain_isotonic_str() {
     m = n - 1;
-    E = new int* [m];
-    for (int i = 0;i < m;i++) {
-      E[i] = new int[2];
-    }
-    int E_count = 0;
+    // E = new int* [m];
+    E.resize(m, vector<int>(2)); 
+
+    // for (int i = 0;i < m;i++) {
+    //   E[i] = new int[2];
+    // }
+    // int E_count = 0;
 
     for (int i = 0;i < m;i++) {
       str_DAG.connect(i, i + 1);
-      E[E_count][0] = i;
-      E[E_count][1] = i + 1;
-      E_count++;
+      E[i][0] = i;
+      E[i][1] = i + 1;
+      // E_count++;
     }
   }
 
-  void load_isotonic_str_via_mats(int** E_mat, int m_input) {
-    m = m_input;
-    E = new int* [m];
-    for (int i = 0;i < m;i++) {
-      E[i] = new int[2];
-    }
+  // int** E_mat, int m_input
+  void load_isotonic_str_via_mats(const vector<vector<int>>& E_mat) { 
+
+    m = E_mat.size();
+    E.resize(m, vector<int>(2));
+    // for (int i = 0;i < m;i++) {
+    //   E[i] = new int[2];
+    // }
 
     for (int i = 0;i < m;i++) {
       str_DAG.connect(E_mat[i][0], E_mat[i][1]);
@@ -437,7 +457,7 @@ public:
 
   void load_tree_isotonic_str() {
     m = n - 1;
-    E = new int* [m];
+    E.resize(m, vector<int>(2));
     for (int i = 0;i < m;i++) {
       E[i] = new int[2];
     }
@@ -466,10 +486,10 @@ public:
   void load_2D_isotonic_str() {
     int nl = floor(sqrt(n));
     m = nl * nl - 2 * nl + n;
-    E = new int* [m];
-    for (int i = 0;i < m;i++) {
-      E[i] = new int[2];
-    }
+    E.resize(m, vector<int>(2));
+    // for (int i = 0;i < m;i++) {
+    //   E[i] = new int[2];
+    // }
     int E_count = 0;
 
     for (int i = 0;i < nl - 1;i++) {
@@ -505,22 +525,25 @@ public:
   void solve_by_SBM(bool remember_adj_gra = false) {
     outer_loop = 0;
     inner_loop = 0;
-    for (int i = 0;i < n;i++) {
-      calibrated_xl[i] = xl[i];
-    }
+    calibrated_xl = xl;
+    // for (int i = 0;i < n;i++) {
+    //   calibrated_xl[i] = xl[i];
+    // }
     Adjacency_list* Adjacency_obj = new Adjacency_list(n);
-    double* Ax = compute_Ax();
+    vector<double> Ax = compute_Ax();
+    // double* Ax = compute_Ax();
+    //--------------------------------------- PART WHERE BLOCK VALUE AND BLOCK SET ARE DEFINED -------------------
     int min_pos = whichMin(Ax, m);
     double min_value = Ax[min_pos];
     int i, j;
     double x_bar;
-    double* local_lambda;
+    vector<double> local_lambda;
     set<int> block_set;
     while (min_value < -1e-9) {
       outer_loop++;
       i = E[min_pos][0];
       j = E[min_pos][1];
-      if (Adjacency_obj->isEmpty(i) && Adjacency_obj->isEmpty(j)) {
+      if (Adjacency_obj->isEmpty(i) && Adjacency_obj->isEmpty(j)) { // fresh merge and new block created 
         Adjacency_obj->connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
         if (weighted) {
@@ -532,7 +555,7 @@ public:
         calibrated_xl[i] = x_bar;
         calibrated_xl[j] = x_bar;
       }
-      else {
+      else { // Already an existing block for either j or i or both 
         Adjacency_obj->connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
         block_set = Adjacency_obj->compute_subgraph(i); // get all the index inside this block
@@ -542,7 +565,7 @@ public:
           calibrated_xl[*it] = x_bar;
           // cout << "x[" << *it << "] = " << x_bar << endl;
         }
-        if (get_min_value(local_lambda, block_set.size() - 1) < -1e-12) {
+        if (get_min_value(local_lambda, block_set.size() - 1) < -1e-12) { // a negative lambda value appeared after a merge --> need to split block 
           // go to inner loop
           set<int> G_bar_index_set;
           for (int i = 0;i < block_set.size() - 1;i++) {
@@ -551,11 +574,11 @@ public:
           current_nbo = block_set.size();
           solve_inner_loop(G_bar_index_set, local_lambda, Adjacency_obj);
         }
-        for (int i = 0;i < block_set.size() - 1;i++) {
-          delete[]El[i];
-        }
-        delete[]El;
-        delete[]local_lambda;
+        // for (int i = 0;i < block_set.size() - 1;i++) {
+        //   delete[]El[i];
+        // }
+        // delete[]El;
+        // delete[]local_lambda;
       }
       Compute_min_diff(min_value, min_pos, Ax);
     }
@@ -571,7 +594,7 @@ public:
     }
   }
 
-  void solve_inner_loop(set<int> &inequality_indexset, double *lambda, Adjacency_list* Adjacency_obj) {
+  void solve_inner_loop(set<int> &inequality_indexset, vector<double>&lambda, Adjacency_list* Adjacency_obj) {
     set<int> current_equality_indexset;
     set<int> current_inequality_indexset;
     // initialization
@@ -618,11 +641,11 @@ public:
         calibrated_xl[*it] = x_bar_j;
       }
       if (block_set_i.size() != 1) {
-        double* local_lambda_i = solve_local_KKT(block_set_i, x_bar_i, El_i, Adjacency_obj);
+        vector<double> local_lambda_i = solve_local_KKT(block_set_i, x_bar_i, El_i, Adjacency_obj); //double* local_lambda_i
         updata_local_lamdba(lambda, El, local_lambda_i, El_i, block_set_i.size() - 1);
       }
       if (block_set_j.size() != 1) {
-        double* local_lambda_j = solve_local_KKT(block_set_j, x_bar_j, El_j, Adjacency_obj);
+        vector<double> local_lambda_j = solve_local_KKT(block_set_j, x_bar_j, El_j, Adjacency_obj);
         updata_local_lamdba(lambda, El, local_lambda_j, El_j, block_set_j.size() - 1);
       }
 
@@ -637,7 +660,7 @@ public:
         set<int> subcurrent_set = Adjacency_obj->compute_subgraph(min_i);
         int** l_El = new int* [subcurrent_set.size() - 1];
         double l_x_bar = get_x_bar(subcurrent_set);
-        double* l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
+        vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
         updata_local_lamdba(lambda, El, l_local_lambda, l_El, subcurrent_set.size() - 1);
         for (set<int>::iterator it = subcurrent_set.begin();it != subcurrent_set.end();it++) {
           calibrated_xl[*it] = l_x_bar;
@@ -646,7 +669,7 @@ public:
           delete[]l_El[i];
         }
         delete[]l_El;
-        delete[]l_local_lambda;
+        // delete[]l_local_lambda;
         is_still_primal_feasible = is_primal_feasible(El, current_nbo - 1, min_i, min_j);
       }
 
@@ -690,30 +713,31 @@ public:
   }
 
 
-  void get_x_calibrated(double* x_to_write) {
-    for (int i = 0;i < n;i++) {
-      x_to_write[i] = calibrated_xl[i];
-    }
+  void get_x_calibrated(vector<double>& x_to_write) const {
+    x_to_write = calibrated_xl;
+    // for (int i = 0;i < n;i++) {
+    //   x_to_write[i] = calibrated_xl[i];
+    // }
   }
 
 
 private:
   int n; // number of node
   int m; // number of constraints or edges
-  double* xl; // data of every nodes
-  double* calibrated_xl; // calibrated xl
-  double* weights; // weights
+  vector<double> xl; // data of every nodes
+  vector<double> calibrated_xl; // calibrated xl
+  vector<double> weights; // weights
   bool weighted;
   DAG str_DAG;
-  Adjacency_list* warm_start_obj;
+  Adjacency_list* warm_start_obj = nullptr;
 
-  int outer_loop;
-  int inner_loop;
+  int outer_loop = 0;
+  int inner_loop = 0;
   int current_nbo = 0;
 
-  int** E; // constraints input matrix
+  vector<vector<int>> E; // constraints input matrix
   int** El; //local_str_info
-  double* compute_Ax() {
+  vector<double> compute_Ax() {
     double* Ax = new double[m];
     for (int i = 0;i < m;i++) {
       Ax[i] = -calibrated_xl[E[i][0]] + calibrated_xl[E[i][1]];
@@ -721,7 +745,7 @@ private:
     return Ax;
   }
 
-  int whichMin(double* x, int size) {
+  int whichMin(const vector<double>& x, int size) {
     int min_pos;
     min_pos = 0;
     for (int i = 1;i < size;i++) {
@@ -731,7 +755,7 @@ private:
     }
     return min_pos;
   }
-  double get_min_value(double* x, int size) {
+  double get_min_value(vector<double>& x, int size) {
     double min_value = x[0];
     for (int i = 1;i < size;i++) {
       if (x[i] < min_value) {
@@ -740,7 +764,7 @@ private:
     }
     return min_value;
   }
-  double get_x_bar(set<int> inactive_set) {
+  double get_x_bar(const set<int>& inactive_set) {
     double x_bar = 0.0;
     if (weighted) {
       double w_sum = 0.0;
@@ -761,7 +785,7 @@ private:
 
 
 
-  void Compute_min_diff(double& min_value, int& min_pos, double*& Ax) {
+  void Compute_min_diff(double& min_value, int& min_pos, vector<double>& Ax) {
     min_value = 0.0;
     for (int i = 0;i < m;i++) {
       Ax[i] = -calibrated_xl[E[i][0]] + calibrated_xl[E[i][1]];
@@ -772,7 +796,7 @@ private:
     }
   }
 
-  set<int> get_violator_set(double* x) {
+  set<int> get_violator_set(vector<double>& x) {
     set<int> violator_set;
     for (int i = 0;i < m;i++) {
       if (-x[E[i][0]] + x[E[i][1]] < -1e-9) {
@@ -791,7 +815,7 @@ private:
     }
   }
 
-  void updata_local_lamdba(double*& big_local_lambda, int** El_big, double*& small_local_lambda, int** El_small, int small_n) {
+  void updata_local_lamdba(vector<double>& big_local_lambda, vector<vector<int>>& El_big, vector<double>& small_local_lambda, vector<vector<int>>& El_small, int small_n) {
     int countEl;
     for (int ii = 0; ii < small_n;ii++) {
       countEl = 0;
@@ -803,32 +827,33 @@ private:
     }
   }
 
-  double* solve_local_KKT(set<int>& inactive_set, double& x_bar, int**& El, Adjacency_list* Adjacency_obj) {
+  double* solve_local_KKT(set<int>& inactive_set, double& x_bar, vector<vector<int>>& El, Adjacency_list* Adjacency_obj) {
     int nl = inactive_set.size() - 1;
-    double** Al = new double* [nl];
-    double* bl = new double[nl];
-    El = new int* [nl];
-    for (int i = 0;i < nl;i++) {
-      El[i] = new int[2];
-      Al[i] = new double[nl];
-      for (int j = 0;j < nl;j++) {
-        Al[i][j] = 0;
-      }
-      bl[i] = 0;
-      El[i][0] = 0;
-      El[i][1] = 0;
-    }
-    int count_El = 0;
-    int* temp_array = new int[nl + 1];
-    for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
-      temp_array[count_El] = int(*it);
-      count_El++;
-    }
-    int* row_abs_sum = new int[nl];
-    int* unique_col_index = new int[nl];
-    for (int i = 0;i < nl;i++) {
-      row_abs_sum[i] = 0;
-    }
+    vector<vector<double>> Al(nl, vector<double>(nl, 0.0));
+    vector<vector<int>> El(nl, vector<int>(2, 0));
+    vector<double> bl(nl, 0.0);
+    std::vector<int> temp_array(inactive_set.begin(), inactive_set.end());
+    // for (int i = 0;i < nl;i++) {
+    //   El[i] = new int[2];
+    //   Al[i] = new double[nl];
+    //   for (int j = 0;j < nl;j++) {
+    //     Al[i][j] = 0;
+    //   }
+    //   bl[i] = 0;
+    //   El[i][0] = 0;
+    //   El[i][1] = 0;
+    // }
+    // int count_El = 0;
+    // vector<int> temp_array(nl + 1);
+    // for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
+    //   temp_array[count_El] = int(*it);
+    //   count_El++;
+    // }
+    vector<int> row_abs_sum(nl, 0);
+    vector<int> unique_col_index(nl);
+    // for (int i = 0;i < nl;i++) {
+    //   row_abs_sum[i] = 0;
+    // }
     count_El = 0;
     int ii, jj;
     for (int i = 0;i < inactive_set.size();i++) {
@@ -855,7 +880,7 @@ private:
         }
       }
     }
-    delete[]temp_array;
+    // delete[]temp_array;
     int count_eq = 0;
     for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
       if (count_eq < nl) {
@@ -863,22 +888,23 @@ private:
         count_eq++;
       }
     }
-    double* local_lambda = solve_linear_system(Al, bl, nl);
+    vector<double> local_lambda = solve_linear_system(Al, bl, nl);
 
-    for (int i = 0;i < nl;i++) {
-      delete[]Al[i];
-    }
-    delete[]Al;
-    delete[]bl;
-    delete[]unique_col_index;
+    // for (int i = 0;i < nl;i++) {
+    //   delete[]Al[i];
+    // }
+    // delete[]Al;
+    // delete[]bl;
+    // delete[]unique_col_index;
 
     return local_lambda;
   }
 
-  double* solve_linear_system(double**& Al, double*& bl, int& nl) {
-    double** Aug = new double* [nl];
+  double* solve_linear_system(vector<vector<double>>& Al, vector<double>& bl, int& nl) {
+    // double** Aug = new double* [nl];
+    vector<vector<double>> Aug(nl, vector<double>(nl+1, 0.0));
     for (int i = 0;i < nl;i++) {
-      Aug[i] = new double[nl + 1];
+      // Aug[i] = new double[nl + 1]; # No need 
       for (int j = 0;j < nl;j++) {
         Aug[i][j] = Al[i][j];
       }
@@ -914,7 +940,8 @@ private:
       }
     }
 
-    double* x_star = new double[nl];
+    // double* x_star = new double[nl];
+    vector<double> x_star(nl);
     x_star[nl - 1] = Aug[nl - 1][nl] / Aug[nl - 1][nl - 1];
 
     for (int i = nl - 2; i >= 0; i = i - 1)
@@ -925,10 +952,10 @@ private:
       x_star[i] = (Aug[i][nl] - s) / Aug[i][i];
     }
 
-    for (int i = 0;i < nl;i++) {
-      delete[]Aug[i];
-    }
-    delete[]Aug;
+    // for (int i = 0;i < nl;i++) {
+    //   delete[]Aug[i];
+    // }
+    // delete[]Aug;
 
     return x_star;
   }
@@ -945,7 +972,7 @@ private:
     return is_feasible;
   }
 
-  bool is_primal_feasible(int**& El, int nl, int& min_i, int& min_j) {
+  bool is_primal_feasible(vector<vector<int>>& El, int nl, int& min_i, int& min_j) {//int**& El, int nl, int& min_i, int& min_j
     double min_value = 0.0;
     for (int i = 0; i < nl;i++) {
       if (-calibrated_xl[El[i][0]] + calibrated_xl[El[i][1]] < min_value) {
@@ -962,22 +989,25 @@ private:
 // [[Rcpp::export]]
 NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
-  double* y = new double[n];
-  double* w = new double[n];
-  for(int i = 0; i < n; i++) {
-    y[i] = y_input[i];
-    w[i] = w_input[i];
-  }
-  orderedBlock* BT = new orderedBlock(n, y, w);
-  BT->load_chain_isotonic_str();
-  BT->solve_by_SBM();
+  vector<double> y = y_input;
+  vector<double> w = w_input;
+  
+  // double* y = new double[n];
+  // double* w = new double[n];
+  // for(int i = 0; i < n; i++) {
+  //   y[i] = y_input[i];
+  //   w[i] = w_input[i];
+  // }
+  orderedBlock BT(n, y, w);
+  BT.load_chain_isotonic_str();
+  BT.solve_by_SBM();
 
-  double* x_ordered = new double[n];
-  BT->get_x_calibrated(x_ordered);
+  // vector<double> x_ordered(n);
   NumericVector x_res(n);
-  for(int i = 0; i < n; i++) {
-    x_res[i] = x_ordered[i];
-  }
+  BT.get_x_calibrated(&x_res[0]);
+  // for(int i = 0; i < n; i++) {
+  //   x_res[i] = x_ordered[i];
+  // }
   return(x_res);
 }
 
@@ -985,78 +1015,81 @@ NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) 
 // [[Rcpp::export]]
 NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
-  double* y = new double[n];
-  double* w = new double[n];
-  for(int i = 0; i < n; i++) {
-    y[i] = y_input[i];
-    w[i] = w_input[i];
-  }
-  orderedBlock* BT = new orderedBlock(n, y, w);
-  BT->load_tree_isotonic_str();
-  BT->solve_by_SBM();
+  vector<double> y = y_input;
+  vector<double> w = w_input;
 
-  double* x_ordered = new double[n];
-  BT->get_x_calibrated(x_ordered);
+  // double* y = new double[n];
+  // double* w = new double[n];
+  // for(int i = 0; i < n; i++) {
+  //   y[i] = y_input[i];
+  //   w[i] = w_input[i];
+  // }
+  orderedBlock BT(n, y, w);
+  BT.load_tree_isotonic_str();
+  BT.solve_by_SBM();
+
+  // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  for(int i = 0; i < n; i++) {
-    x_res[i] = x_ordered[i];
-  }
+  BT.get_x_calibrated(&x_res[0]);
+  // for(int i = 0; i < n; i++) {
+  //   x_res[i] = x_ordered[i];
+  // }
   return(x_res);
 }
 
 // [[Rcpp::export]]
 NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
-  double* y = new double[n];
-  double* w = new double[n];
-  for(int i = 0; i < n; i++) {
-    y[i] = y_input[i];
-    w[i] = w_input[i];
-  }
-  orderedBlock* BT = new orderedBlock(n, y, w);
-  BT->load_2D_isotonic_str();
-  BT->solve_by_SBM();
+  vector<double> y = y_input;
+  vector<double> w = w_input;
+  // for(int i = 0; i < n; i++) {
+  //   y[i] = y_input[i];
+  //   w[i] = w_input[i];
+  // }
+  orderedBlock BT(n, y, w);
+  BT.load_2D_isotonic_str();
+  BT.solve_by_SBM();
 
-  double* x_ordered = new double[n];
-  BT->get_x_calibrated(x_ordered);
+  // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  for(int i = 0; i < n; i++) {
-    x_res[i] = x_ordered[i];
-  }
+  BT.get_x_calibrated(&x_res[0]);
+  // for(int i = 0; i < n; i++) {
+  //   x_res[i] = x_ordered[i];
+  // }
   return(x_res);
 }
 
 // [[Rcpp::export]]
 NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input) {
   int n = y_input.size();
-  double* y = new double[n];
-  double* w = new double[n];
-  for(int i = 0; i < n; i++) {
-    y[i] = y_input[i];
-    w[i] = w_input[i];
-  }
-  orderedBlock* BT = new orderedBlock(n, y, w);
+  vector<double> y = y_input;
+  vector<double> w = w_input;
+  // for(int i = 0; i < n; i++) {
+  //   y[i] = y_input[i];
+  //   w[i] = w_input[i];
+  // }
+  orderedBlock BT(n, y, w);
 
   int m = E_mat_input.nrow();
-  int** E_mat = new int*[m];
+  vector<vector<int>> E_mat(m, vector<double>(2, 0));
   for(int i=0;i<m;i++) {
-    E_mat[i] = new int[2];
+    // E_mat[i] = new int[2]; no need 
     E_mat[i][0] = int(E_mat_input(i,0));
     E_mat[i][1] = int(E_mat_input(i,1));
     //cout << E_mat[i][0] << " " << E_mat[i][1] << endl;
   }
   //cout << m << endl;
 
-  BT->load_isotonic_str_via_mats(E_mat, m);
+  BT.load_isotonic_str_via_mats(E_mat, m);
   //BT->print_E();
-  BT->solve_by_SBM();
+  BT.solve_by_SBM();
 
-  double* x_ordered = new double[n];
-  BT->get_x_calibrated(x_ordered);
+  // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  for(int i = 0; i < n; i++) {
-    x_res[i] = x_ordered[i];
-  }
+  BT->get_x_calibrated(&x_res[0]);
+  // for(int i = 0; i < n; i++) {
+  //   x_res[i] = x_ordered[i];
+  // }
   return(x_res);
 }
 
