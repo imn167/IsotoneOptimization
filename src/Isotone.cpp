@@ -318,6 +318,13 @@ public:
 private:
   int n;
   DAG_node** node_array;
+
+  void reset(int new_n) {
+    n = new_n;
+    // Clear your internal adjacency lists/vectors
+    adj.assign(new_n, vector<int>()); 
+    // If you have an edge count or other state, reset those to 0 too
+}
 };
 
 class ListNode {
@@ -529,7 +536,13 @@ public:
     // for (int i = 0;i < n;i++) {
     //   calibrated_xl[i] = xl[i];
     // }
-    Adjacency_list* Adjacency_obj = new Adjacency_list(n);
+    
+    // Adjacency_list* Adjacency_obj = new Adjacency_list(n);
+    // Instead of 'new', just reset the existing object
+    if (!remember_adj_gra) {
+
+      adj_internal.reset(n);
+    }
     vector<double> Ax = compute_Ax();
     // double* Ax = compute_Ax();
     //--------------------------------------- PART WHERE BLOCK VALUE AND BLOCK SET ARE DEFINED -------------------
@@ -582,16 +595,16 @@ public:
       }
       Compute_min_diff(min_value, min_pos, Ax);
     }
-    if (remember_adj_gra) {
-      //Adjacency_obj.print();
-      if (warm_start_obj != NULL) {
-        delete warm_start_obj;
-      }
-      warm_start_obj = Adjacency_obj;
-    }
-    else {
-      delete Adjacency_obj;
-    }
+    // if (remember_adj_gra) {
+    //   //Adjacency_obj.print();
+    //   if (warm_start_obj != NULL) {
+    //     delete warm_start_obj;
+    //   }
+    //   warm_start_obj = Adjacency_obj;
+    // }
+    // else {
+    //   delete Adjacency_obj;
+    // }
   }
 
   void solve_inner_loop(set<int> &inequality_indexset, vector<double>&lambda, Adjacency_list* Adjacency_obj) {
@@ -609,8 +622,8 @@ public:
     bool local_kkt_solved = true;
     double min_lambda = 0;
     int min_lambda_pos = 0;
-    int** El_i; //local_str_info
-    int** El_j; //local_str_info
+    vector<vector<int>> El_i; //local_str_info
+    vector<vector<int>> El_j; //local_str_info
     for (set<int>::iterator it = inequality_indexset.begin(); it != inequality_indexset.end();it++) {
       if (lambda[*it] < min_lambda) {
         local_kkt_solved = false;
@@ -658,17 +671,18 @@ public:
         Adjacency_obj->connect(min_i, min_j);
         //cout << "re-connect " << min_i << "-" << min_j << endl;
         set<int> subcurrent_set = Adjacency_obj->compute_subgraph(min_i);
-        int** l_El = new int* [subcurrent_set.size() - 1];
+        // int** l_El = new int* [subcurrent_set.size() - 1];
+        vector<vector<int>> l_El(subcurrent_set.size() - 1, vector<int>(2, 0));
         double l_x_bar = get_x_bar(subcurrent_set);
         vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
         updata_local_lamdba(lambda, El, l_local_lambda, l_El, subcurrent_set.size() - 1);
         for (set<int>::iterator it = subcurrent_set.begin();it != subcurrent_set.end();it++) {
           calibrated_xl[*it] = l_x_bar;
         }
-        for (int i = 0;i < subcurrent_set.size() - 1;i++) {
-          delete[]l_El[i];
-        }
-        delete[]l_El;
+        // for (int i = 0;i < subcurrent_set.size() - 1;i++) {
+        //   delete[]l_El[i];
+        // }
+        // delete[]l_El;
         // delete[]l_local_lambda;
         is_still_primal_feasible = is_primal_feasible(El, current_nbo - 1, min_i, min_j);
       }
@@ -720,6 +734,31 @@ public:
     // }
   }
 
+  vector<vector<int>> get_partitions() {
+      vector<vector<int>> partitions;
+      // Keep track of which nodes we've already assigned to a block
+      vector<bool> visited(n, false);
+
+      for (int i = 0; i < n; i++) {
+          // If node 'i' hasn't been put in a block yet, it starts a new one
+          if (!visited[i]) {
+              // Get all nodes connected to 'i' in the final adjacency graph
+              // Theorem: These connected nodes form a single block with the same x_bar
+              set<int> block_set = adj_internal.compute_subgraph(i);
+              
+              // Convert the set to a vector to store it in our results
+              vector<int> current_block(block_set.begin(), block_set.end());
+              partitions.push_back(current_block);
+
+              // Mark all nodes in this new block as visited
+              for (int node_idx : current_block) {
+                  visited[node_idx] = true;
+              }
+          }
+      }
+      return partitions;
+  }
+
 
 private:
   int n; // number of node
@@ -729,16 +768,16 @@ private:
   vector<double> weights; // weights
   bool weighted;
   DAG str_DAG;
-  Adjacency_list* warm_start_obj = nullptr;
+  Adjacency_list adj_internal; // No pointer! // Adjacency_list* warm_start_obj = nullptr;
 
   int outer_loop = 0;
   int inner_loop = 0;
   int current_nbo = 0;
 
   vector<vector<int>> E; // constraints input matrix
-  int** El; //local_str_info
+  vector<vector<int>> El; //local_str_info
   vector<double> compute_Ax() {
-    double* Ax = new double[m];
+    vector<double> Ax(m);
     for (int i = 0;i < m;i++) {
       Ax[i] = -calibrated_xl[E[i][0]] + calibrated_xl[E[i][1]];
     }
@@ -764,6 +803,7 @@ private:
     }
     return min_value;
   }
+
   double get_x_bar(const set<int>& inactive_set) {
     double x_bar = 0.0;
     if (weighted) {
@@ -1071,7 +1111,7 @@ NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w
   orderedBlock BT(n, y, w);
 
   int m = E_mat_input.nrow();
-  vector<vector<int>> E_mat(m, vector<double>(2, 0));
+  vector<vector<int>> E_mat(m, vector<int>(2, 0));
   for(int i=0;i<m;i++) {
     // E_mat[i] = new int[2]; no need 
     E_mat[i][0] = int(E_mat_input(i,0));
@@ -1086,11 +1126,30 @@ NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w
 
   // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  BT->get_x_calibrated(&x_res[0]);
+  vector<double> temp_res(n);
+  BT.get_x_calibrated(temp_res);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
-  return(x_res);
+  // return(x_res);
+
+  // 2. Get the partitions
+  vector<vector<int>> part_vec = BT.get_partitions();
+  
+  // 3. Convert C++ vector<vector> to R List
+  List blocks(part_vec.size());
+  for(int i = 0; i < part_vec.size(); i++) {
+      // Definition: Each element of the list is an integer vector of indices
+      blocks[i] = wrap(part_vec[i]);
+  }
+
+  // 4. Return everything in one tidy package
+  return List::create(
+    _["x"] = x_res,
+    _["blocks"] = blocks,
+    _["iterations"] = BT.get_outer_loop_num()
+  );
+  
 }
 
 
