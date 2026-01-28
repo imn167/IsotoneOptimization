@@ -48,7 +48,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // solve_ordered_arbitrary_DAG
-NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input);
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input);
 RcppExport SEXP _IsotoneOptimization_solve_ordered_arbitrary_DAG(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP E_mat_inputSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

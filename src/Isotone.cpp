@@ -19,6 +19,11 @@ public:
 
 class Adjacency_list {
 public:
+
+// Add a default constructor 
+  Adjacency_list() : n(0), node_ad_array(nullptr) {}
+
+
   Adjacency_list(int size) {
     n = size;
     node_ad_array = new node * [size];
@@ -26,19 +31,32 @@ public:
       node_ad_array[i] = new node(i);
     }
   }
+  // ~Adjacency_list() {
+  //   for (int i = 0; i < n;i++) {
+  //     node* cur_node = node_ad_array[i];
+  //     node* temp_node = cur_node;
+  //     while (cur_node->next != NULL) {
+  //       temp_node = cur_node->next;
+  //       delete cur_node;
+  //       cur_node = temp_node;
+  //     }
+  //     delete cur_node;
+  //   }
+  //   delete[]node_ad_array;
+  // }
+
+
   ~Adjacency_list() {
-    for (int i = 0; i < n;i++) {
-      node* cur_node = node_ad_array[i];
-      node* temp_node = cur_node;
-      while (cur_node->next != NULL) {
-        temp_node = cur_node->next;
-        delete cur_node;
-        cur_node = temp_node;
-      }
-      delete cur_node;
+    for (int i = 0; i < n; i++) {
+        node* cur = node_ad_array[i];
+        while (cur != nullptr) {
+            node* next_node = cur->next; // Save the next pointer BEFORE deleting
+            delete cur;                  // Safe to delete now
+            cur = next_node;             // Move to the saved pointer
+        }
     }
-    delete[]node_ad_array;
-  }
+    delete[] node_ad_array;
+}
 
   Adjacency_list(const Adjacency_list& src_obj) {
     n = src_obj.n;
@@ -46,7 +64,7 @@ public:
     for (int i = 0;i < n;i++) {
       node_ad_array[i] = new node(i);
     }
-    int ii = 0;
+    // int ii = 0;
     for (int ii = 0;ii < n;ii++) {
       node* cur_node_obj = src_obj.node_ad_array[ii];
       node* cur_node = node_ad_array[ii];
@@ -59,6 +77,27 @@ public:
       }
     }
 
+  }
+
+  // FIX: Proper reset that cleans old memory and restarts
+  void reset(int new_n) {
+    // Call the destructor logic to clear old pointer memory
+    for (int i = 0; i < n; i++) {
+      node* cur = node_ad_array[i];
+      while (cur) {
+        node* next = cur->next;
+        delete cur;
+        cur = next;
+      }
+    }
+    delete[] node_ad_array;
+
+    // Re-initialize for the new size
+    n = new_n;
+    node_ad_array = new node*[n];
+    for (int i = 0; i < n; i++) {
+      node_ad_array[i] = new node(i);
+    }
   }
 
   bool isEmpty(int i) {
@@ -319,12 +358,6 @@ private:
   int n;
   DAG_node** node_array;
 
-  void reset(int new_n) {
-    n = new_n;
-    // Clear your internal adjacency lists/vectors
-    adj.assign(new_n, vector<int>()); 
-    // If you have an edge count or other state, reset those to 0 too
-}
 };
 
 class ListNode {
@@ -379,13 +412,16 @@ public:
 
 class orderedBlock {
 public:
-  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>() ) {
-    n = size;
-    xl.resize(n);
-    calibrated_xl.resize(n);
-    weights.resize(n);
-
-    weighted = !w.empty();
+  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>() ) 
+  : n(size), xl(y), calibrated_xl(y),weights(w.empty() ? vector<double>() : w), // Only copy if not empty
+      weighted(!w.empty()), adj_internal(size) // Initialize here!
+  {
+    // n = size;
+    // xl.resize(n);
+    // calibrated_xl.resize(n);
+    // weights.resize(n);
+    // adj_internal.resize(n);
+    // weighted = !w.empty();
 
     // if (w != NULL) {
     //   weighted = true;
@@ -394,15 +430,15 @@ public:
     //   weighted = false;
     // }
 
-    if (!y.empty()) {
-      xl = y;
-      calibrated_xl = y;
+    // if (!y.empty()) {
+    //   xl = y;
+    //   calibrated_xl = y;
 
-    }
+    // }
 
-    if (weighted) {
-      weights = w;
-    }
+    // if (weighted) {
+    //   weights = w;
+    // }
     
     // if (y != NULL) {
     //   for (int i = 0;i < n;i++) {
@@ -416,7 +452,7 @@ public:
     //   }
     // }
 
-    str_DAG = DAG();
+    // str_DAG = DAG();
     str_DAG.initialize(n);
   }
   // no destructor needed ! Everything auto-cleaned 
@@ -465,9 +501,9 @@ public:
   void load_tree_isotonic_str() {
     m = n - 1;
     E.resize(m, vector<int>(2));
-    for (int i = 0;i < m;i++) {
-      E[i] = new int[2];
-    }
+    // for (int i = 0;i < m;i++) {
+    //   E[i] = new int[2];
+    // }
 
     int h = floor(log2(n + 1));
     int count = 0;
@@ -556,8 +592,8 @@ public:
       outer_loop++;
       i = E[min_pos][0];
       j = E[min_pos][1];
-      if (Adjacency_obj->isEmpty(i) && Adjacency_obj->isEmpty(j)) { // fresh merge and new block created 
-        Adjacency_obj->connect(i, j);
+      if (adj_internal.isEmpty(i) && adj_internal.isEmpty(j)) { // fresh merge and new block created 
+        adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
         if (weighted) {
           x_bar = (xl[i] * weights[i] + xl[j] * weights[j]) / (weights[i] + weights[j]);
@@ -569,11 +605,11 @@ public:
         calibrated_xl[j] = x_bar;
       }
       else { // Already an existing block for either j or i or both 
-        Adjacency_obj->connect(i, j);
+        adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
-        block_set = Adjacency_obj->compute_subgraph(i); // get all the index inside this block
+        block_set = adj_internal.compute_subgraph(i); // get all the index inside this block
         x_bar = get_x_bar(block_set);
-        local_lambda = solve_local_KKT(block_set, x_bar, El, Adjacency_obj);
+        local_lambda = solve_local_KKT(block_set, x_bar, El, &adj_internal);
         for (set<int>::iterator it = block_set.begin();it != block_set.end();it++) {
           calibrated_xl[*it] = x_bar;
           // cout << "x[" << *it << "] = " << x_bar << endl;
@@ -585,7 +621,7 @@ public:
             G_bar_index_set.insert(i);
           }
           current_nbo = block_set.size();
-          solve_inner_loop(G_bar_index_set, local_lambda, Adjacency_obj);
+          solve_inner_loop(G_bar_index_set, local_lambda, &adj_internal);
         }
         // for (int i = 0;i < block_set.size() - 1;i++) {
         //   delete[]El[i];
@@ -867,10 +903,10 @@ private:
     }
   }
 
-  double* solve_local_KKT(set<int>& inactive_set, double& x_bar, vector<vector<int>>& El, Adjacency_list* Adjacency_obj) {
+  vector<double> solve_local_KKT(set<int>& inactive_set, double& x_bar, vector<vector<int>>& El, Adjacency_list* Adjacency_obj) {
     int nl = inactive_set.size() - 1;
     vector<vector<double>> Al(nl, vector<double>(nl, 0.0));
-    vector<vector<int>> El(nl, vector<int>(2, 0));
+    El.assign(nl, vector<int>(2, 0)); //initialization 
     vector<double> bl(nl, 0.0);
     std::vector<int> temp_array(inactive_set.begin(), inactive_set.end());
     // for (int i = 0;i < nl;i++) {
@@ -883,7 +919,7 @@ private:
     //   El[i][0] = 0;
     //   El[i][1] = 0;
     // }
-    // int count_El = 0;
+    int count_El = 0;
     // vector<int> temp_array(nl + 1);
     // for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
     //   temp_array[count_El] = int(*it);
@@ -940,7 +976,7 @@ private:
     return local_lambda;
   }
 
-  double* solve_linear_system(vector<vector<double>>& Al, vector<double>& bl, int& nl) {
+  vector<double> solve_linear_system(vector<vector<double>>& Al, vector<double>& bl, int& nl) {
     // double** Aug = new double* [nl];
     vector<vector<double>> Aug(nl, vector<double>(nl+1, 0.0));
     for (int i = 0;i < nl;i++) {
@@ -1028,9 +1064,11 @@ private:
 
 // [[Rcpp::export]]
 NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
+  
   int n = y_input.size();
-  vector<double> y = y_input;
-  vector<double> w = w_input;
+  // Convert Rcpp vectors to standard C++ vectors
+  vector<double> y = Rcpp::as<vector<double>>(y_input);
+  vector<double> w = Rcpp::as<vector<double>>(w_input);
   
   // double* y = new double[n];
   // double* w = new double[n];
@@ -1043,20 +1081,21 @@ NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) 
   BT.solve_by_SBM();
 
   // vector<double> x_ordered(n);
-  NumericVector x_res(n);
-  BT.get_x_calibrated(&x_res[0]);
+  vector<double> x_calibrated(n);
+  BT.get_x_calibrated(x_calibrated);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
-  return(x_res);
+  return Rcpp::wrap(x_calibrated);
 }
 
 
 // [[Rcpp::export]]
 NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
-  vector<double> y = y_input;
-  vector<double> w = w_input;
+  // Convert Rcpp vectors to standard C++ vectors
+  vector<double> y = Rcpp::as<vector<double>>(y_input);
+  vector<double> w = Rcpp::as<vector<double>>(w_input);
 
   // double* y = new double[n];
   // double* w = new double[n];
@@ -1070,7 +1109,8 @@ NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_i
 
   // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  BT.get_x_calibrated(&x_res[0]);
+  vector<double> temp_res(n);
+  BT.get_x_calibrated(temp_res);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
@@ -1080,8 +1120,9 @@ NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_i
 // [[Rcpp::export]]
 NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
-  vector<double> y = y_input;
-  vector<double> w = w_input;
+  // Convert Rcpp vectors to standard C++ vectors
+  vector<double> y = Rcpp::as<vector<double>>(y_input);
+  vector<double> w = Rcpp::as<vector<double>>(w_input);
   // for(int i = 0; i < n; i++) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
@@ -1092,7 +1133,8 @@ NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input
 
   // double* x_ordered = new double[n];
   NumericVector x_res(n);
-  BT.get_x_calibrated(&x_res[0]);
+  vector<double> temp_res(n);
+  BT.get_x_calibrated(temp_res);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
@@ -1100,10 +1142,11 @@ NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input
 }
 
 // [[Rcpp::export]]
-NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input) {
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input) {
   int n = y_input.size();
-  vector<double> y = y_input;
-  vector<double> w = w_input;
+  // Convert Rcpp vectors to standard C++ vectors
+  vector<double> y = Rcpp::as<vector<double>>(y_input);
+  vector<double> w = Rcpp::as<vector<double>>(w_input);
   // for(int i = 0; i < n; i++) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
@@ -1120,7 +1163,7 @@ NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w
   }
   //cout << m << endl;
 
-  BT.load_isotonic_str_via_mats(E_mat, m);
+  BT.load_isotonic_str_via_mats(E_mat);
   //BT->print_E();
   BT.solve_by_SBM();
 
@@ -1137,19 +1180,19 @@ NumericVector solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w
   vector<vector<int>> part_vec = BT.get_partitions();
   
   // 3. Convert C++ vector<vector> to R List
-  List blocks(part_vec.size());
+  Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {
       // Definition: Each element of the list is an integer vector of indices
       blocks[i] = wrap(part_vec[i]);
   }
 
   // 4. Return everything in one tidy package
-  return List::create(
+  return Rcpp::List::create(
     _["x"] = x_res,
     _["blocks"] = blocks,
     _["iterations"] = BT.get_outer_loop_num()
   );
-  
+
 }
 
 
