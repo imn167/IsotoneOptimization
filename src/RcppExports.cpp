@@ -12,7 +12,7 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // solve_ordered_chain
-NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input);
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input);
 RcppExport SEXP _IsotoneOptimization_solve_ordered_chain(SEXP y_inputSEXP, SEXP w_inputSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -24,7 +24,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // solve_ordered_binary_tree
-NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input);
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input);
 RcppExport SEXP _IsotoneOptimization_solve_ordered_binary_tree(SEXP y_inputSEXP, SEXP w_inputSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
@@ -36,7 +36,7 @@ BEGIN_RCPP
 END_RCPP
 }
 // solve_ordered_2d_grid
-NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input);
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input);
 RcppExport SEXP _IsotoneOptimization_solve_ordered_2d_grid(SEXP y_inputSEXP, SEXP w_inputSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;

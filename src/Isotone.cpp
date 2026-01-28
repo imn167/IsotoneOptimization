@@ -779,7 +779,7 @@ public:
           // If node 'i' hasn't been put in a block yet, it starts a new one
           if (!visited[i]) {
               // Get all nodes connected to 'i' in the final adjacency graph
-              // Theorem: These connected nodes form a single block with the same x_bar
+              // These connected nodes form a single block with the same x_bar
               set<int> block_set = adj_internal.compute_subgraph(i);
               
               // Convert the set to a vector to store it in our results
@@ -789,6 +789,7 @@ public:
               // Mark all nodes in this new block as visited
               for (int node_idx : current_block) {
                   visited[node_idx] = true;
+                  node_idx +=1;
               }
           }
       }
@@ -1063,7 +1064,7 @@ private:
 
 
 // [[Rcpp::export]]
-NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
   
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
@@ -1086,12 +1087,28 @@ NumericVector solve_ordered_chain(NumericVector y_input, NumericVector w_input) 
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
-  return Rcpp::wrap(x_calibrated);
+  // 2. Get the partitions
+  vector<vector<int>> part_vec = BT.get_partitions();
+  
+  // 3. Convert C++ vector<vector> to R List
+  Rcpp::List blocks(part_vec.size());
+  for(int i = 0; i < part_vec.size(); i++) {
+      // Each element of the list is an integer vector of indices
+      blocks[i] = wrap(part_vec[i]) ;
+  }
+
+  // 4. Return everything in one tidy package
+  return Rcpp::List::create(
+    _["x"] = Rcpp::wrap(x_calibrated),
+    _["blocks"] = blocks,
+    _["nb_outer_loop"] = BT.get_outer_loop_num(),
+    _["nb_inner_loop"] = BT.get_inner_loop_num()
+  );
 }
 
 
 // [[Rcpp::export]]
-NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input) {
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
@@ -1108,17 +1125,33 @@ NumericVector solve_ordered_binary_tree(NumericVector y_input, NumericVector w_i
   BT.solve_by_SBM();
 
   // double* x_ordered = new double[n];
-  NumericVector x_res(n);
-  vector<double> temp_res(n);
-  BT.get_x_calibrated(temp_res);
+  // NumericVector x_res(n);
+  vector<double> x_calibrated(n);
+  BT.get_x_calibrated(x_calibrated);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
-  return(x_res);
+  // 2. Get the partitions
+  vector<vector<int>> part_vec = BT.get_partitions();
+  
+  // 3. Convert C++ vector<vector> to R List
+  Rcpp::List blocks(part_vec.size());
+  for(int i = 0; i < part_vec.size(); i++) {
+      // Each element of the list is an integer vector of indices
+      blocks[i] = wrap(part_vec[i]) ;
+  }
+
+  // 4. Return everything in one tidy package
+  return Rcpp::List::create(
+    _["x"] = Rcpp::wrap(x_calibrated),
+    _["blocks"] = blocks,
+    _["nb_outer_loop"] = BT.get_outer_loop_num(),
+    _["nb_inner_loop"] = BT.get_inner_loop_num()
+  );
 }
 
 // [[Rcpp::export]]
-NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
@@ -1132,13 +1165,29 @@ NumericVector solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input
   BT.solve_by_SBM();
 
   // double* x_ordered = new double[n];
-  NumericVector x_res(n);
-  vector<double> temp_res(n);
-  BT.get_x_calibrated(temp_res);
+  // NumericVector x_res(n);
+  vector<double> x_calibrated(n);
+  BT.get_x_calibrated(x_calibrated);
   // for(int i = 0; i < n; i++) {
   //   x_res[i] = x_ordered[i];
   // }
-  return(x_res);
+  // 2. Get the partitions
+  vector<vector<int>> part_vec = BT.get_partitions();
+  
+  // 3. Convert C++ vector<vector> to R List
+  Rcpp::List blocks(part_vec.size());
+  for(int i = 0; i < part_vec.size(); i++) {
+      // Each element of the list is an integer vector of indices
+      blocks[i] = wrap(part_vec[i]) ;
+  }
+
+  // 4. Return everything in one tidy package
+  return Rcpp::List::create(
+    _["x"] = Rcpp::wrap(x_calibrated),
+    _["blocks"] = blocks,
+    _["nb_outer_loop"] = BT.get_outer_loop_num(),
+    _["nb_inner_loop"] = BT.get_inner_loop_num()
+  );
 }
 
 // [[Rcpp::export]]
@@ -1168,7 +1217,7 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
   BT.solve_by_SBM();
 
   // double* x_ordered = new double[n];
-  NumericVector x_res(n);
+  // NumericVector x_res(n);
   vector<double> temp_res(n);
   BT.get_x_calibrated(temp_res);
   // for(int i = 0; i < n; i++) {
@@ -1182,15 +1231,16 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
   // 3. Convert C++ vector<vector> to R List
   Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {
-      // Definition: Each element of the list is an integer vector of indices
-      blocks[i] = wrap(part_vec[i]);
+      // Each element of the list is an integer vector of indices
+      blocks[i] = wrap(part_vec[i]) ;
   }
 
   // 4. Return everything in one tidy package
   return Rcpp::List::create(
-    _["x"] = x_res,
+    _["x"] = Rcpp::wrap(temp_res),
     _["blocks"] = blocks,
-    _["iterations"] = BT.get_outer_loop_num()
+    _["nb_outer_loop"] = BT.get_outer_loop_num(),
+    _["nb_inner_loop"] = BT.get_inner_loop_num()
   );
 
 }
