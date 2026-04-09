@@ -20,7 +20,7 @@ public:
 class Adjacency_list {
 public:
 
-// Add a default constructor 
+// Add a default constructor
   Adjacency_list() : n(0), node_ad_array(nullptr) {}
 
 
@@ -412,9 +412,9 @@ public:
 
 class orderedBlock {
 public:
-  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>() ) 
+  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>(), double delta = 1.0, std::string loss = "quadratic")
   : n(size), xl(y), calibrated_xl(y),weights(w.empty() ? vector<double>() : w), // Only copy if not empty
-      weighted(!w.empty()), adj_internal(size) // Initialize here!
+      weighted(!w.empty()), adj_internal(size), delta(delta), loss(loss) // Initialize here!
   {
     // n = size;
     // xl.resize(n);
@@ -439,7 +439,7 @@ public:
     // if (weighted) {
     //   weights = w;
     // }
-    
+
     // if (y != NULL) {
     //   for (int i = 0;i < n;i++) {
     //     xl[i] = y[i];
@@ -455,8 +455,8 @@ public:
     // str_DAG = DAG();
     str_DAG.initialize(n);
   }
-  // no destructor needed ! Everything auto-cleaned 
-  ~orderedBlock() = default; 
+  // no destructor needed ! Everything auto-cleaned
+  ~orderedBlock() = default;
   // ~orderedBlock() {
   //   delete[]xl;
   //   delete[]calibrated_xl;
@@ -465,7 +465,7 @@ public:
   void load_chain_isotonic_str() {
     m = n - 1;
     // E = new int* [m];
-    E.resize(m, vector<int>(2)); 
+    E.resize(m, vector<int>(2));
 
     // for (int i = 0;i < m;i++) {
     //   E[i] = new int[2];
@@ -481,7 +481,7 @@ public:
   }
 
   // int** E_mat, int m_input
-  void load_isotonic_str_via_mats(const vector<vector<int>>& E_mat) { 
+  void load_isotonic_str_via_mats(const vector<vector<int>>& E_mat) {
 
     m = E_mat.size();
     E.resize(m, vector<int>(2));
@@ -572,7 +572,7 @@ public:
     // for (int i = 0;i < n;i++) {
     //   calibrated_xl[i] = xl[i];
     // }
-    
+
     // Adjacency_list* Adjacency_obj = new Adjacency_list(n);
     // Instead of 'new', just reset the existing object
     if (!remember_adj_gra) {
@@ -592,29 +592,46 @@ public:
       outer_loop++;
       i = E[min_pos][0];
       j = E[min_pos][1];
-      if (adj_internal.isEmpty(i) && adj_internal.isEmpty(j)) { // fresh merge and new block created 
+      if (adj_internal.isEmpty(i) && adj_internal.isEmpty(j)) { // fresh merge and new block created
         adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
+        if (loss == "quadratic") {
+
         if (weighted) {
           x_bar = (xl[i] * weights[i] + xl[j] * weights[j]) / (weights[i] + weights[j]);
         }
         else {
           x_bar = 0.5 * (xl[i] + xl[j]);
+          }
+        }
+        else if (loss == "smoothH") {
+          set<int> two_set = {i,j};
+          x_bar = solve_block_newton(two_set);
+          cout << "number of newton iteration" << get_iter_newton() << ":" << i << "-" << j << endl;
+
         }
         calibrated_xl[i] = x_bar;
         calibrated_xl[j] = x_bar;
       }
-      else { // Already an existing block for either j or i or both 
+
+      else { // Already an existing block for either j or i or both
         adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
         block_set = adj_internal.compute_subgraph(i); // get all the index inside this block
+        if (loss == "quadratic") {
         x_bar = get_x_bar(block_set);
+        }
+        else if (loss == "smoothH") {
+          x_bar = solve_block_newton(block_set);
+          cout << "number of newton iteration " << get_iter_newton() << endl;
+        }
+
         local_lambda = solve_local_KKT(block_set, x_bar, El, &adj_internal);
         for (set<int>::iterator it = block_set.begin();it != block_set.end();it++) {
           calibrated_xl[*it] = x_bar;
           // cout << "x[" << *it << "] = " << x_bar << endl;
         }
-        if (get_min_value(local_lambda, block_set.size() - 1) < -1e-12) { // a negative lambda value appeared after a merge --> need to split block 
+        if (get_min_value(local_lambda, block_set.size() - 1) < -1e-12) { // a negative lambda value appeared after a merge --> need to split block
           // go to inner loop
           set<int> G_bar_index_set;
           for (int i = 0;i < block_set.size() - 1;i++) {
@@ -681,8 +698,20 @@ public:
       set<int> block_set_j = Adjacency_obj->compute_subgraph(to_delete_j);
 
       // re-optimize individual blocks, update x and lambda
-      double x_bar_i = get_x_bar(block_set_i);
-      double x_bar_j = get_x_bar(block_set_j);
+      double x_bar_i = 0.0;
+      double x_bar_j = 0.0;
+
+      if (loss == "quadratic") {
+
+       x_bar_i = get_x_bar(block_set_i);
+       x_bar_j = get_x_bar(block_set_j);
+      }
+
+      else if (loss == "smoothH") {
+        x_bar_i = solve_block_newton(block_set_i);
+        x_bar_j = solve_block_newton(block_set_j);
+      }
+
       for (set<int>::iterator it = block_set_i.begin();it != block_set_i.end();it++) {
         calibrated_xl[*it] = x_bar_i;
       }
@@ -709,7 +738,13 @@ public:
         set<int> subcurrent_set = Adjacency_obj->compute_subgraph(min_i);
         // int** l_El = new int* [subcurrent_set.size() - 1];
         vector<vector<int>> l_El(subcurrent_set.size() - 1, vector<int>(2, 0));
-        double l_x_bar = get_x_bar(subcurrent_set);
+        double l_x_bar = 0.0;
+        if (loss == "quadratic") {
+        l_x_bar = get_x_bar(subcurrent_set);
+        }
+        else if (loss == "smoothH") {
+          l_x_bar = solve_block_newton(subcurrent_set);
+        }
         vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
         updata_local_lamdba(lambda, El, l_local_lambda, l_El, subcurrent_set.size() - 1);
         for (set<int>::iterator it = subcurrent_set.begin();it != subcurrent_set.end();it++) {
@@ -755,6 +790,10 @@ public:
     return(outer_loop);
   }
 
+  int get_iter_newton() {
+    return(iter_newton);
+  }
+
   void print_xl() {
     for (int j = 0;j < n;j++) {
       cout << calibrated_xl[j] << " ";
@@ -781,16 +820,16 @@ public:
               // Get all nodes connected to 'i' in the final adjacency graph
               // These connected nodes form a single block with the same x_bar
               set<int> block_set = adj_internal.compute_subgraph(i);
-              
-              // Convert the set to a vector to store it in our results
-              vector<int> current_block(block_set.begin(), block_set.end());
-              partitions.push_back(current_block);
 
-              // Mark all nodes in this new block as visited
-              for (int node_idx : current_block) {
-                  visited[node_idx] = true;
-                  node_idx +=1;
+              vector<int> current_block;
+              // Convert the set to a vector to store it in our results one by one to increment by 1
+              for (int node : block_set) {
+                visited[node] = true;
+                current_block.push_back(node +1);
               }
+
+              // added completed block to the list
+              partitions.push_back(current_block);
           }
       }
       return partitions;
@@ -798,6 +837,7 @@ public:
 
 
 private:
+  std::string loss;
   int n; // number of node
   int m; // number of constraints or edges
   vector<double> xl; // data of every nodes
@@ -807,9 +847,13 @@ private:
   DAG str_DAG;
   Adjacency_list adj_internal; // No pointer! // Adjacency_list* warm_start_obj = nullptr;
 
+  double delta; // log-cosh transition scale
+
+
   int outer_loop = 0;
   int inner_loop = 0;
   int current_nbo = 0;
+  int iter_newton = 0;
 
   vector<vector<int>> E; // constraints input matrix
   vector<vector<int>> El; //local_str_info
@@ -841,6 +885,79 @@ private:
     return min_value;
   }
 
+
+
+  // Weigheted median via partial_sort for Newton init
+  double get_weighted_median(const set<int>& inactive_set) {
+    vector<pair<double, double>> vw;
+    vw.reserve(inactive_set.size());
+    double w_total = 0.0;
+    for (int idx : inactive_set) {
+      double wi = weighted ? weights[idx] : 1.0;
+      vw.push_back({xl[idx], wi});
+      w_total += wi;
+    }
+    sort(vw.begin(), vw.end());
+    // walk until cumulative weights >= half
+    double cum = 0.0;
+    for (auto&p : vw) {
+      cum+= p.second;
+      if (cum>= 0.5 * w_total) return p.first;
+    }
+    return vw.back().first;
+  }
+
+  double solve_block_newton(const set<int>& inactive_set) {
+    int n_block = inactive_set.size();
+    // Trivial case
+    if (n_block == 1) {
+      return xl[*inactive_set.begin()];
+    }
+    if (n_block == 2) {
+      auto it = inactive_set.begin();
+      double y1 = xl[*it]; double w1 = weighted ? weights[*it]: 1.0; ++it;
+      double y2 = xl[*it]; double w2 = weighted ? weights[*it]: 1.0;
+
+      if (!weighted || w1 == w2) return 0.5 * (y1+ y2);
+    }
+
+    // ---- Initialize at weighted median ---
+    double z = get_weighted_median(inactive_set);
+
+    // Numerical tolerances
+    const double eps_match = std::numeric_limits<double>::epsilon(); // 2.2e-16
+    const double eps_S2 = n_block * eps_match / delta; // underflow guard
+    const double eps_resid = n_block * std::sqrt(eps_match); // |F'| threshold
+    const double eps_step = std::sqrt(eps_match) * delta;
+    const int max_iter = 50;
+
+    for (int iter = 0; iter< max_iter; ++iter) {
+      double S1 = 0.0;
+      double S2 = 0.0;
+
+      for (int idx : inactive_set) {
+        double wi = weighted ? weights[idx] : 1.0;
+        double r = (z-xl[idx]) / delta;
+        double th = std::tanh(r);
+        double sch = 1.0 / std::cosh(r);
+        S1 += wi * th;
+        S2 += wi * sch* sch;
+      }
+      iter_newton += 1;
+
+      // underflow guard sech^2 -> 0
+      if (S2 < eps_S2) break;
+
+      double step = delta * S1 / S2;
+      z-= step;
+
+      // Convergence: both residual and step are negligible
+      if (std::fabs(S1) <= eps_resid && std::fabs(step) <= eps_step) break;
+    }
+
+    return z;
+  }
+
   double get_x_bar(const set<int>& inactive_set) {
     double x_bar = 0.0;
     if (weighted) {
@@ -859,7 +976,6 @@ private:
     }
     return x_bar;
   }
-
 
 
   void Compute_min_diff(double& min_value, int& min_pos, vector<double>& Ax) {
@@ -892,6 +1008,14 @@ private:
     }
   }
 
+  double partial_rhoi(int i, double x_i) {
+    double grad = std::tanh((x_i - xl[i]) / delta);
+    if (weighted) {
+      return weights[i] * grad;
+    }
+    return grad;
+  }
+
   void updata_local_lamdba(vector<double>& big_local_lambda, vector<vector<int>>& El_big, vector<double>& small_local_lambda, vector<vector<int>>& El_small, int small_n) {
     int countEl;
     for (int ii = 0; ii < small_n;ii++) {
@@ -907,7 +1031,7 @@ private:
   vector<double> solve_local_KKT(set<int>& inactive_set, double& x_bar, vector<vector<int>>& El, Adjacency_list* Adjacency_obj) {
     int nl = inactive_set.size() - 1;
     vector<vector<double>> Al(nl, vector<double>(nl, 0.0));
-    El.assign(nl, vector<int>(2, 0)); //initialization 
+    El.assign(nl, vector<int>(2, 0)); //initialization
     vector<double> bl(nl, 0.0);
     std::vector<int> temp_array(inactive_set.begin(), inactive_set.end());
     // for (int i = 0;i < nl;i++) {
@@ -961,7 +1085,12 @@ private:
     int count_eq = 0;
     for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
       if (count_eq < nl) {
+        if (loss == "quadratic") {
         bl[count_eq] = -partial_fi(*it, x_bar);
+        }
+        else if (loss == "smoothH") {
+          bl[count_eq] = -partial_rhoi(*it, x_bar);
+        }
         count_eq++;
       }
     }
@@ -981,7 +1110,7 @@ private:
     // double** Aug = new double* [nl];
     vector<vector<double>> Aug(nl, vector<double>(nl+1, 0.0));
     for (int i = 0;i < nl;i++) {
-      // Aug[i] = new double[nl + 1]; # No need 
+      // Aug[i] = new double[nl + 1]; # No need
       for (int j = 0;j < nl;j++) {
         Aug[i][j] = Al[i][j];
       }
@@ -1064,20 +1193,20 @@ private:
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
-  
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
+
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
-  
+
   // double* y = new double[n];
   // double* w = new double[n];
   // for(int i = 0; i < n; i++) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w);
+  orderedBlock BT(n, y, w, delta, loss);
   BT.load_chain_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1089,7 +1218,7 @@ Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
   // }
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();
-  
+
   // 3. Convert C++ vector<vector> to R List
   Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {
@@ -1108,7 +1237,7 @@ Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input) {
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input) {
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
@@ -1120,7 +1249,7 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w);
+  orderedBlock BT(n, y, w, delta, loss);
   BT.load_tree_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1133,7 +1262,7 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
   // }
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();
-  
+
   // 3. Convert C++ vector<vector> to R List
   Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {
@@ -1151,7 +1280,7 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
 }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
@@ -1160,7 +1289,7 @@ Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w);
+  orderedBlock BT(n, y, w, delta, loss);
   BT.load_2D_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1173,7 +1302,7 @@ Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
   // }
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();
-  
+
   // 3. Convert C++ vector<vector> to R List
   Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {
@@ -1191,7 +1320,7 @@ Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input) {
 }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input) {
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta = 1.0, std::string loss = "quadratic") {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
@@ -1200,12 +1329,12 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w);
+  orderedBlock BT(n, y, w, delta, loss);
 
   int m = E_mat_input.nrow();
   vector<vector<int>> E_mat(m, vector<int>(2, 0));
   for(int i=0;i<m;i++) {
-    // E_mat[i] = new int[2]; no need 
+    // E_mat[i] = new int[2]; no need
     E_mat[i][0] = int(E_mat_input(i,0));
     E_mat[i][1] = int(E_mat_input(i,1));
     //cout << E_mat[i][0] << " " << E_mat[i][1] << endl;
@@ -1227,7 +1356,7 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
 
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();
-  
+
   // 3. Convert C++ vector<vector> to R List
   Rcpp::List blocks(part_vec.size());
   for(int i = 0; i < part_vec.size(); i++) {

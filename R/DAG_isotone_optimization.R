@@ -25,7 +25,7 @@
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat) {
+solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat, delta = 1, loss = "quadratic") {
   # error control
   if (ncol(Emat) != 2) {
     stop("The matrix Emat should be m * 2.")
@@ -51,7 +51,9 @@ solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat) {
       stop("Length of ", dQuote("y"), " should be equal to length of ", dQuote("w"), ".")
     }
   }
-  return(solve_ordered_arbitrary_DAG(y, w, Emat - 1))
+
+  if (!(loss %in% c("quadratic", "smoothH"))) stop("accepted loss are L2 or log-cosh")
+  return(solve_ordered_arbitrary_DAG(y, w, Emat - 1, delta, loss))
 }
 
 
