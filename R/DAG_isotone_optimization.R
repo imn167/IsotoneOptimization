@@ -12,6 +12,8 @@
 #' @param y regression vector
 #' @param w weights (default is NULL)
 #' @param Emat An m*2 Matrix to define the edges. Each row, given as (i,j), represents an edge from i to j
+#' @param loss type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)
+#' @param delta hyperparameter if method == "smoothH"
 #'
 #' @return A list containing the following elements:
 #' \item{\code{x_ordered}}{Optimal solution that satisfies the .}
@@ -25,7 +27,7 @@
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat, delta = 1, loss = "quadratic") {
+solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat, delta = 1, loss = "quadratic", eps = 1e-7) {
   # error control
   if (ncol(Emat) != 2) {
     stop("The matrix Emat should be m * 2.")
@@ -52,8 +54,8 @@ solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat, delta = 1, loss = 
     }
   }
 
-  if (!(loss %in% c("quadratic", "smoothH"))) stop("accepted loss are L2 or log-cosh")
-  return(solve_ordered_arbitrary_DAG(y, w, Emat - 1, delta, loss))
+  if (!(loss %in% c("quadratic", "smoothH", "huber"))) stop("accepted loss are L2 or log-cosh")
+  return(solve_ordered_arbitrary_DAG(y, w, Emat - 1, delta, loss, eps))
 }
 
 

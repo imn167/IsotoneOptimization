@@ -12,6 +12,8 @@
 #'
 #' @param y data vector
 #' @param w weights (default is NULL)
+#' @param loss type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)
+#' @param delta hyperparameter if method == "smoothH"
 #'
 #' @return A list containing the following elements:
 #' \item{\code{x_ordered}}{Optimal solution that satisfies the .}
@@ -57,6 +59,8 @@ solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic")
 #'
 #' @param y data vector
 #' @param w weights (default is NULL)
+#' @param loss type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)
+#' @param delta hyperparameter if method == "smoothH"
 #'
 #' @return A list containing the following elements:
 #' \item{\code{x_ordered}}{Optimal solution that satisfies the .}
@@ -101,6 +105,9 @@ solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic") {
 #'
 #' @param y data vector
 #' @param w weights (default is NULL)
+#' @param loss type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)
+#' @param delta hyperparameter if method == "smoothH"
+#' @param eps tikhonov regularization for loss == "huber"
 #'
 #' @return A list containing the following elements:
 #' \item{\code{x_ordered}}{Optimal solution that satisfies the .}
@@ -114,7 +121,7 @@ solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic") {
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic") {
+solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic", eps = 1e-7) {
   # error control
   if (!is.null(w)) {
     if (min(w) < 0) {
@@ -127,5 +134,5 @@ solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic") {
   else {
     w <- rep(1, length(y))
   }
-  return(solve_ordered_chain(y, w, delta, loss))
+  return(solve_ordered_chain(y, w, delta, loss, eps))
 }

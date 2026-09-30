@@ -1,6 +1,8 @@
 test_that("Isotone Optimization for some specific isotonic constraints works", {
   load("Specific_strs.RData")
   x_chain <- solve_isotone_chain(y, w)
+  x_chain_logcosh = solve_isotone_chain(y, w, delta = 5, loss = "smoothH")
+  x_chain_huber = solve_isotone_chain(y, w, delta = 5, loss = "huber", eps = 1e-7)
   x_tree <- solve_isotone_binary_tree(y,w)
   x_2d_grid <- solve_isotone_2d_grid(y,w)
   expect_equal(x_chain$x, x_chain_check)

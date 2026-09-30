@@ -4,12 +4,16 @@
 \alias{solve_isotone_2d_grid}
 \title{Isotonic Regression with 2d-grid-ordered isotonic constraints}
 \usage{
-solve_isotone_2d_grid(y, w = NULL)
+solve_isotone_2d_grid(y, w = NULL, delta = 1, loss = "quadratic")
 }
 \arguments{
 \item{y}{data vector}
 
 \item{w}{weights (default is NULL)}
+
+\item{delta}{hyperparameter if method == "smoothH"}
+
+\item{loss}{type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)}
 }
 \value{
 A list containing the following elements:

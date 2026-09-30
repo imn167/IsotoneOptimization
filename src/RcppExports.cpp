@@ -12,8 +12,8 @@ Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
 #endif
 
 // solve_ordered_chain
-Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta, std::string loss);
-RcppExport SEXP _IsotoneOptimization_solve_ordered_chain(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP) {
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta, std::string loss, double eps);
+RcppExport SEXP _IsotoneOptimization_solve_ordered_chain(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -21,13 +21,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type w_input(w_inputSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< std::string >::type loss(lossSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_ordered_chain(y_input, w_input, delta, loss));
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_ordered_chain(y_input, w_input, delta, loss, eps));
     return rcpp_result_gen;
 END_RCPP
 }
 // solve_ordered_binary_tree
-Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta, std::string loss);
-RcppExport SEXP _IsotoneOptimization_solve_ordered_binary_tree(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP) {
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta, std::string loss, double eps);
+RcppExport SEXP _IsotoneOptimization_solve_ordered_binary_tree(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -35,13 +36,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type w_input(w_inputSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< std::string >::type loss(lossSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_ordered_binary_tree(y_input, w_input, delta, loss));
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_ordered_binary_tree(y_input, w_input, delta, loss, eps));
     return rcpp_result_gen;
 END_RCPP
 }
 // solve_ordered_2d_grid
-Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta, std::string loss);
-RcppExport SEXP _IsotoneOptimization_solve_ordered_2d_grid(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP) {
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta, std::string loss, double eps);
+RcppExport SEXP _IsotoneOptimization_solve_ordered_2d_grid(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -49,13 +51,14 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericVector >::type w_input(w_inputSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< std::string >::type loss(lossSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_ordered_2d_grid(y_input, w_input, delta, loss));
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_ordered_2d_grid(y_input, w_input, delta, loss, eps));
     return rcpp_result_gen;
 END_RCPP
 }
 // solve_ordered_arbitrary_DAG
-Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta, std::string loss);
-RcppExport SEXP _IsotoneOptimization_solve_ordered_arbitrary_DAG(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP E_mat_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP) {
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta, std::string loss, double eps);
+RcppExport SEXP _IsotoneOptimization_solve_ordered_arbitrary_DAG(SEXP y_inputSEXP, SEXP w_inputSEXP, SEXP E_mat_inputSEXP, SEXP deltaSEXP, SEXP lossSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -64,16 +67,17 @@ BEGIN_RCPP
     Rcpp::traits::input_parameter< NumericMatrix >::type E_mat_input(E_mat_inputSEXP);
     Rcpp::traits::input_parameter< double >::type delta(deltaSEXP);
     Rcpp::traits::input_parameter< std::string >::type loss(lossSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_ordered_arbitrary_DAG(y_input, w_input, E_mat_input, delta, loss));
+    Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
+    rcpp_result_gen = Rcpp::wrap(solve_ordered_arbitrary_DAG(y_input, w_input, E_mat_input, delta, loss, eps));
     return rcpp_result_gen;
 END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_IsotoneOptimization_solve_ordered_chain", (DL_FUNC) &_IsotoneOptimization_solve_ordered_chain, 4},
-    {"_IsotoneOptimization_solve_ordered_binary_tree", (DL_FUNC) &_IsotoneOptimization_solve_ordered_binary_tree, 4},
-    {"_IsotoneOptimization_solve_ordered_2d_grid", (DL_FUNC) &_IsotoneOptimization_solve_ordered_2d_grid, 4},
-    {"_IsotoneOptimization_solve_ordered_arbitrary_DAG", (DL_FUNC) &_IsotoneOptimization_solve_ordered_arbitrary_DAG, 5},
+    {"_IsotoneOptimization_solve_ordered_chain", (DL_FUNC) &_IsotoneOptimization_solve_ordered_chain, 5},
+    {"_IsotoneOptimization_solve_ordered_binary_tree", (DL_FUNC) &_IsotoneOptimization_solve_ordered_binary_tree, 5},
+    {"_IsotoneOptimization_solve_ordered_2d_grid", (DL_FUNC) &_IsotoneOptimization_solve_ordered_2d_grid, 5},
+    {"_IsotoneOptimization_solve_ordered_arbitrary_DAG", (DL_FUNC) &_IsotoneOptimization_solve_ordered_arbitrary_DAG, 6},
     {NULL, NULL, 0}
 };
 

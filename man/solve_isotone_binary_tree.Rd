@@ -4,12 +4,16 @@
 \alias{solve_isotone_binary_tree}
 \title{Isotonic Regression with binary-tree-ordered isotonic constraints}
 \usage{
-solve_isotone_binary_tree(y, w = NULL)
+solve_isotone_binary_tree(y, w = NULL, delta = 1, loss = "quadratic")
 }
 \arguments{
 \item{y}{data vector}
 
 \item{w}{weights (default is NULL)}
+
+\item{delta}{hyperparameter if method == "smoothH"}
+
+\item{loss}{type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)}
 }
 \value{
 A list containing the following elements:

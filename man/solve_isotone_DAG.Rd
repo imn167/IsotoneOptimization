@@ -4,7 +4,13 @@
 \alias{solve_isotone_DAG}
 \title{Isotonic Regression with isotonic constraints represented by arbitrary directed acyclic graph}
 \usage{
-solve_isotone_DAG(y, w = rep(1, length(y)), Emat)
+solve_isotone_DAG(
+  y,
+  w = rep(1, length(y)),
+  Emat,
+  delta = 1,
+  loss = "quadratic"
+)
 }
 \arguments{
 \item{y}{regression vector}
@@ -12,6 +18,10 @@ solve_isotone_DAG(y, w = rep(1, length(y)), Emat)
 \item{w}{weights (default is NULL)}
 
 \item{Emat}{An m*2 Matrix to define the edges. Each row, given as (i,j), represents an edge from i to j}
+
+\item{delta}{hyperparameter if method == "smoothH"}
+
+\item{loss}{type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)}
 }
 \value{
 A list containing the following elements:

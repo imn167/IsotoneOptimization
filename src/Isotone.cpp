@@ -412,10 +412,20 @@ public:
 
 class orderedBlock {
 public:
-  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>(), double delta = 1.0, std::string loss = "quadratic")
+  orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>(), double delta = 1.0, std::string loss = "quadratic",
+               double eps = 0.0) // const vector<double>& sol_ir = vector<double>()
   : n(size), xl(y), calibrated_xl(y),weights(w.empty() ? vector<double>() : w), // Only copy if not empty
-      weighted(!w.empty()), adj_internal(size), delta(delta), loss(loss) // Initialize here!
+      weighted(!w.empty()),
+      adj_internal(size),
+      loss(loss),
+      delta(delta),
+      eps(eps)
+      // sol_ir(sol_ir)// Initialize here!
   {
+    // if (eps > 0.0 && sol_ir.empty()) {
+    //   throw std::invalid_argument(
+    //       "orderedBlock: eps > 0 require an IR solution (sol_ir) non-empty for Tikhonov regularisation.");
+    // }
     // n = size;
     // xl.resize(n);
     // calibrated_xl.resize(n);
@@ -568,6 +578,8 @@ public:
   void solve_by_SBM(bool remember_adj_gra = false) {
     outer_loop = 0;
     inner_loop = 0;
+    n_bisection_fallback = 0;
+    all_blocks_converged = true;
     calibrated_xl = xl;
     // for (int i = 0;i < n;i++) {
     //   calibrated_xl[i] = xl[i];
@@ -592,6 +604,7 @@ public:
       outer_loop++;
       i = E[min_pos][0];
       j = E[min_pos][1];
+
       if (adj_internal.isEmpty(i) && adj_internal.isEmpty(j)) { // fresh merge and new block created
         adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
@@ -607,24 +620,39 @@ public:
         else if (loss == "smoothH") {
           set<int> two_set = {i,j};
           x_bar = solve_block_newton(two_set);
-          cout << "number of newton iteration" << get_iter_newton() << ":" << i << "-" << j << endl;
-
+          blocks_converged.push_back(get_block_converged() ? 1 : 0);
+          kantorovich.push_back(get_kantorovich_certif());
+          // cout << "number of newton iteration " << get_iter_newton() << " : samples" << i << "-" << j << endl;
+          // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
         }
+        else if (loss == "huber") {
+          set<int> two_set = {i,j};
+          x_bar = solve_block_huber(two_set);
+        }
+
         calibrated_xl[i] = x_bar;
         calibrated_xl[j] = x_bar;
       }
 
       else { // Already an existing block for either j or i or both
         adj_internal.connect(i, j);
-        //cout << "Connecting " << i << "-" << j << endl;
+        // cout << "Connecting " << i << "-" << j << endl;
         block_set = adj_internal.compute_subgraph(i); // get all the index inside this block
         if (loss == "quadratic") {
         x_bar = get_x_bar(block_set);
         }
         else if (loss == "smoothH") {
           x_bar = solve_block_newton(block_set);
-          cout << "number of newton iteration " << get_iter_newton() << endl;
+          blocks_converged.push_back(get_block_converged() ? 1 : 0);
+          kantorovich.push_back(get_kantorovich_certif());
+          // cout << "number of newton iteration  " << get_iter_newton() << endl;
+          // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
         }
+
+        else if (loss == "huber") {
+          x_bar = solve_block_huber(block_set);
+        }
+
 
         local_lambda = solve_local_KKT(block_set, x_bar, El, &adj_internal);
         for (set<int>::iterator it = block_set.begin();it != block_set.end();it++) {
@@ -709,7 +737,18 @@ public:
 
       else if (loss == "smoothH") {
         x_bar_i = solve_block_newton(block_set_i);
+        blocks_converged.push_back(get_block_converged() ? 1 : 0);
+        kantorovich.push_back(get_kantorovich_certif());
         x_bar_j = solve_block_newton(block_set_j);
+        blocks_converged.push_back(get_block_converged() ? 1 : 0);
+        kantorovich.push_back(get_kantorovich_certif());
+        // cout << "number of newton iteration " << get_iter_newton() << endl;
+        // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
+      }
+
+      else if (loss == "huber") {
+        x_bar_i = solve_block_huber(block_set_i);
+        x_bar_j = solve_block_huber(block_set_j);
       }
 
       for (set<int>::iterator it = block_set_i.begin();it != block_set_i.end();it++) {
@@ -744,7 +783,13 @@ public:
         }
         else if (loss == "smoothH") {
           l_x_bar = solve_block_newton(subcurrent_set);
+          blocks_converged.push_back(get_block_converged() ? 1 : 0);
+          kantorovich.push_back(get_kantorovich_certif());
         }
+        else if (loss == "huber") {
+          l_x_bar = solve_block_huber(subcurrent_set);
+        }
+
         vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
         updata_local_lamdba(lambda, El, l_local_lambda, l_El, subcurrent_set.size() - 1);
         for (set<int>::iterator it = subcurrent_set.begin();it != subcurrent_set.end();it++) {
@@ -793,6 +838,27 @@ public:
   int get_iter_newton() {
     return(iter_newton);
   }
+
+  int get_bisection_fallback() {
+    return(n_bisection_fallback);
+  }
+
+  bool get_block_converged() {
+    return(all_blocks_converged);
+  }
+
+  vector<int> get_converged() {
+    return(blocks_converged);
+  }
+
+  bool get_kantorovich_certif() {
+    return(certified);
+  }
+
+  vector<bool> get_kantorovich() {
+    return(kantorovich);
+  }
+
 
   void print_xl() {
     for (int j = 0;j < n;j++) {
@@ -847,13 +913,24 @@ private:
   DAG str_DAG;
   Adjacency_list adj_internal; // No pointer! // Adjacency_list* warm_start_obj = nullptr;
 
-  double delta; // log-cosh transition scale
+  double delta; // hyperparameter transition in huber / logcosh
+  double eps; // Tikhonov regularization in Huber proj
+
+  // vector<double> sol_ir;
 
 
   int outer_loop = 0;
   int inner_loop = 0;
   int current_nbo = 0;
+  // Log hyperbolic cosine flags
   int iter_newton = 0;
+  int n_bisection_fallback = 0;
+
+  bool all_blocks_converged = true;
+  vector<int> blocks_converged;
+
+  vector<bool> kantorovich;
+  bool certified = false;
 
   vector<vector<int>> E; // constraints input matrix
   vector<vector<int>> El; //local_str_info
@@ -907,55 +984,193 @@ private:
     return vw.back().first;
   }
 
-  double solve_block_newton(const set<int>& inactive_set) {
+
+  // BLOCK SOLVER FUNCTION
+
+  double solve_block_newton(const std::set<int>& inactive_set) {
     int n_block = inactive_set.size();
-    // Trivial case
+    iter_newton = 0;
+
+    // --- Trivial cases -------------------------------------------------
     if (n_block == 1) {
       return xl[*inactive_set.begin()];
     }
+
     if (n_block == 2) {
       auto it = inactive_set.begin();
-      double y1 = xl[*it]; double w1 = weighted ? weights[*it]: 1.0; ++it;
-      double y2 = xl[*it]; double w2 = weighted ? weights[*it]: 1.0;
-
-      if (!weighted || w1 == w2) return 0.5 * (y1+ y2);
+      double y1 = xl[*it]; double w1 = weighted ? weights[*it] : 1.0; ++it;
+      double y2 = xl[*it]; double w2 = weighted ? weights[*it] : 1.0;
+      if (!weighted || w1 == w2) return 0.5 * (y1 + y2);
     }
 
-    // ---- Initialize at weighted median ---
+    // --- Bracket from Prop 3.12: root is always strictly inside --------
+    double lo = std::numeric_limits<double>::infinity();
+    double hi = -std::numeric_limits<double>::infinity();
+    double W  = 0.0;
+    for (int idx : inactive_set) {
+      double xi = xl[idx];
+      if (xi < lo) lo = xi;
+      if (xi > hi) hi = xi;
+      W += weighted ? weights[idx] : 1.0;
+    }
+
     double z = get_weighted_median(inactive_set);
 
-    // Numerical tolerances
+    // --- Numerical tolerances -------------------------------------------
     const double eps_match = std::numeric_limits<double>::epsilon(); // 2.2e-16
-    const double eps_S2 = n_block * eps_match / delta; // underflow guard
-    const double eps_resid = n_block * std::sqrt(eps_match); // |F'| threshold
-    const double eps_step = std::sqrt(eps_match) * delta;
-    const int max_iter = 50;
+    const double eps_S2 =  1e-12; // std::sqrt(n_block) * eps_match * std::max(W, 1.0); // underflow guard
+    const double eps_resid = std::sqrt(n_block )* std::sqrt(eps_match);  // |F'| threshold
+    const double eps_step  = std::sqrt(eps_match) * delta;
+    const int max_iter = 60;
 
-    for (int iter = 0; iter< max_iter; ++iter) {
-      double S1 = 0.0;
-      double S2 = 0.0;
-
+    auto eval = [&](double t, double& S1, double& S2) {
+      S1 = 0.0; S2 = 0.0;
       for (int idx : inactive_set) {
-        double wi = weighted ? weights[idx] : 1.0;
-        double r = (z-xl[idx]) / delta;
-        double th = std::tanh(r);
+        double wi  = weighted ? weights[idx] : 1.0;
+        double r   = (t - xl[idx]) / delta;
+        double th  = std::tanh(r);
         double sch = 1.0 / std::cosh(r);
         S1 += wi * th;
-        S2 += wi * sch* sch;
+        S2 += wi * sch * sch;
       }
-      iter_newton += 1;
+    };
 
-      // underflow guard sech^2 -> 0
-      if (S2 < eps_S2) break;
+    //  Newton-Kantorovich certificate at the median start --- NOT SURE NECESSARY
+    double S1_0, S2_0;
+    eval(z, S1_0, S2_0);
 
-      double step = delta * S1 / S2;
-      z-= step;
-
-      // Convergence: both residual and step are negligible
-      if (std::fabs(S1) <= eps_resid && std::fabs(step) <= eps_step) break;
+    if (S2_0 >= eps_S2) {
+      const double K     = (4.0 * W) / (3.0 * std::sqrt(3.0) * delta);
+      const double beta0 = 1.0 / (2.0 * S2_0);
+      const double eta0  = delta * std::fabs(S1_0) / S2_0;
+      const double h0    = K * beta0 * eta0;
+      certified = (h0 <= 0.5);
     }
 
+      double S1 = S1_0, S2 = S2_0;
+      for (int iter = 0; iter < max_iter; ++iter) {
+        iter_newton += 1;
+        if (std::fabs(S2) < eps_S2 && std::fabs(S1) < eps_resid) break;
+        double step = delta * S1 / S2;
+        z -= step;
+        if (std::fabs(S1) <= eps_resid && std::fabs(step) <= eps_step) {
+          // cout << "Newton S1 " << fabs(S1) << endl;
+          return z;
+          }
+        eval(z, S1, S2);
+
+        // cout << "Newton S1 " << fabs(S1) << " step :" << fabs(step) << " S2 :" << S2  << endl;
+      }
+
+      all_blocks_converged = false;
+
+
+    // --- Step 2b: uncertified -> safeguarded Newton / bisection hybrid -
+    if (!all_blocks_converged) {
+
+      n_bisection_fallback += 1;   // diagnostic counter -- see note below
+
+    for (int iter = 0; iter < max_iter; ++iter) {
+      double S1, S2;
+      eval(z, S1, S2);
+
+      double z_next = z;
+      bool step_ok = false;
+      if (S2 >= eps_S2) {
+        double step = delta * S1 / S2;
+        double candidate = z - step;
+        if (candidate > lo && candidate < hi) {
+          z_next  = candidate;
+          step_ok = true;
+          if (std::fabs(S1) <= eps_resid && std::fabs(step) <= eps_step) {
+            all_blocks_converged = true;
+            return z_next;
+          }
+        }
+      }
+      if (!step_ok) {
+        z_next = 0.5 * (lo + hi);   // Newton rejected or S2 underflowed -> bisect
+      }
+
+      // Tighten the bracket using monotonicity of h_kappa (Prop 3.12)
+      double S1_next, S2_next;
+      eval(z_next, S1_next, S2_next);
+      if (S1_next > 0) hi = z_next; else lo = z_next;
+      z = z_next;
+      if (hi - lo <= eps_step) {
+        all_blocks_converged = true;
+        return z;
+        }
+    }
+    }
+
+    all_blocks_converged = false;   // hit max_iter without meeting tolerance
     return z;
+  }
+
+
+  double solve_block_huber(const std::set<int>& inactive_set) const {
+    struct BreakEvent {
+      double pos;          // theta'_i - delta ou theta'_i + delta
+      double w;
+      double theta_prime;
+      bool is_entry;       // true: entree dans M (U->M), false: sortie de M (M->D)
+    };
+
+    const int n_block = static_cast<int>(inactive_set.size());
+
+    if (n_block == 0) {
+      throw std::runtime_error("solve_block_huber: inactive_set empty");
+    }
+
+    std::vector<BreakEvent> events;
+    events.reserve(2 * n_block);
+
+    double S = 0.0;
+    // double S_ir = 0.0;
+    for (int idx : inactive_set) {
+      const double w = weighted ? weights[idx] : 1.0;
+      S += w;
+      // S_ir += w * sol_ir[idx];
+      events.push_back({xl[idx] - delta, w, xl[idx], true});
+      events.push_back({xl[idx] + delta, w, xl[idx], false});
+    }
+
+    std::sort(events.begin(), events.end(),
+              [](const BreakEvent& a, const BreakEvent& b) { return a.pos < b.pos; });
+
+    double sigma_U = S , sigma_D = 0.0, sigma_M = 0.0, sigma_M_theta = 0.0;
+
+    auto slope     = [&]() { return 2.0 * (sigma_M + eps * S); }; // fixed value S
+    auto intercept = [&]() { return -2.0 * delta * (sigma_U - sigma_D) - 2.0 * sigma_M_theta; }; // fixed value  S_ir -2*eps* S_ir
+
+    double theta_prev = events.front().pos - 1.0;
+    double h_prev = intercept() + slope() * theta_prev;   // < 0 par construction
+
+    for (const auto& ev : events) {
+      const double s = slope();
+      const double candidate = theta_prev - h_prev / s;
+
+      if (candidate <= ev.pos) {
+        return candidate;
+      }
+
+      h_prev = intercept() + slope() * ev.pos;
+      theta_prev = ev.pos;
+
+      if (ev.is_entry) {
+        sigma_U -= ev.w;
+        sigma_M += ev.w;
+        sigma_M_theta += ev.w * ev.theta_prime;
+      } else {
+        sigma_M -= ev.w;
+        sigma_M_theta -= ev.w * ev.theta_prime;
+        sigma_D += ev.w;
+      }
+    }
+
+    const double s = slope();
+    return theta_prev - h_prev / s;
   }
 
   double get_x_bar(const set<int>& inactive_set) {
@@ -999,6 +1214,7 @@ private:
     return violator_set;
   }
 
+// delta_fi
   double partial_fi(int i, double x_i) {
     if (weighted) {
       return(weights[i] * (x_i - xl[i]));
@@ -1014,6 +1230,20 @@ private:
       return weights[i] * grad;
     }
     return grad;
+  }
+
+  double partial_huber(int i, double x_i) {
+    const double r = xl[i] - x_i;
+    const double abs_r = std::fabs(r);
+
+    // clip(r, -delta, delta), avec garde contre la division par zero
+    const double clipped = (abs_r > 1e-12)
+      ? std::min(1.0, delta / abs_r) * r
+    : 0.0;
+
+    const double grad = -2.0 * clipped + 2.0 * eps * x_i;
+
+    return weighted ? weights[i] * grad : grad;
   }
 
   void updata_local_lamdba(vector<double>& big_local_lambda, vector<vector<int>>& El_big, vector<double>& small_local_lambda, vector<vector<int>>& El_small, int small_n) {
@@ -1090,6 +1320,10 @@ private:
         }
         else if (loss == "smoothH") {
           bl[count_eq] = -partial_rhoi(*it, x_bar);
+        }
+
+        else if (loss == "huber") {
+          bl[count_eq] = -partial_huber(*it, x_bar);
         }
         count_eq++;
       }
@@ -1193,20 +1427,15 @@ private:
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta=1.0, std::string loss = "quadratic", double eps= 0.0) { //Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue
 
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
 
-  // double* y = new double[n];
-  // double* w = new double[n];
-  // for(int i = 0; i < n; i++) {
-  //   y[i] = y_input[i];
-  //   w[i] = w_input[i];
-  // }
-  orderedBlock BT(n, y, w, delta, loss);
+  orderedBlock BT(n, y, w, delta, loss, eps);
+
   BT.load_chain_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1231,17 +1460,29 @@ Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, dou
     _["x"] = Rcpp::wrap(x_calibrated),
     _["blocks"] = blocks,
     _["nb_outer_loop"] = BT.get_outer_loop_num(),
-    _["nb_inner_loop"] = BT.get_inner_loop_num()
+    _["nb_inner_loop"] = BT.get_inner_loop_num(),
+    _["converged"] =  BT.get_converged(),
+    _["kantorovich"] = BT.get_kantorovich()
   );
-}
+  }
+
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic", double eps = 0.0) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
+  // vector<double> sol_ir;
+  //
+  // if (sol_ir_input.isNotNull()) {
+  //   // L'utilisateur fournit sa propre origine T_P(theta')
+  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
+  //   if (static_cast<int>(sol_ir.size()) != n) {
+  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
+  //                n, sol_ir.size());
+  //   }}
 
   // double* y = new double[n];
   // double* w = new double[n];
@@ -1249,7 +1490,7 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w, delta, loss);
+  orderedBlock BT(n, y, w, delta, loss, eps);
   BT.load_tree_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1275,21 +1516,32 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
     _["x"] = Rcpp::wrap(x_calibrated),
     _["blocks"] = blocks,
     _["nb_outer_loop"] = BT.get_outer_loop_num(),
-    _["nb_inner_loop"] = BT.get_inner_loop_num()
+    _["nb_inner_loop"] = BT.get_inner_loop_num(),
+    _["converged"] =  BT.get_converged(),
+    _["kantorovich"] = BT.get_kantorovich()
   );
-}
+  }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic") {
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta, std::string loss, double eps) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
+  // vector<double> sol_ir;
+  //
+  // if (sol_ir_input.isNotNull()) {
+  //   // L'utilisateur fournit sa propre origine T_P(theta')
+  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
+  //   if (static_cast<int>(sol_ir.size()) != n) {
+  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
+  //                n, sol_ir.size());
+  //   }}
   // for(int i = 0; i < n; i++) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w, delta, loss);
+  orderedBlock BT(n, y, w, delta, loss, eps);
   BT.load_2D_isotonic_str();
   BT.solve_by_SBM();
 
@@ -1315,21 +1567,32 @@ Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, d
     _["x"] = Rcpp::wrap(x_calibrated),
     _["blocks"] = blocks,
     _["nb_outer_loop"] = BT.get_outer_loop_num(),
-    _["nb_inner_loop"] = BT.get_inner_loop_num()
+    _["nb_inner_loop"] = BT.get_inner_loop_num(),
+    _["converged"] =  BT.get_converged(),
+    _["kantorovich"] = BT.get_kantorovich()
   );
-}
+  }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta = 1.0, std::string loss = "quadratic") {
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta, std::string loss, double eps) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
+  // vector<double> sol_ir;
+  //
+  // if (sol_ir_input.isNotNull()) {
+  //   // L'utilisateur fournit sa propre origine T_P(theta')
+  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
+  //   if (static_cast<int>(sol_ir.size()) != n) {
+  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
+  //                n, sol_ir.size());
+  //   }}
   // for(int i = 0; i < n; i++) {
   //   y[i] = y_input[i];
   //   w[i] = w_input[i];
   // }
-  orderedBlock BT(n, y, w, delta, loss);
+  orderedBlock BT(n, y, w, delta, loss, eps);
 
   int m = E_mat_input.nrow();
   vector<vector<int>> E_mat(m, vector<int>(2, 0));
@@ -1369,10 +1632,12 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
     _["x"] = Rcpp::wrap(temp_res),
     _["blocks"] = blocks,
     _["nb_outer_loop"] = BT.get_outer_loop_num(),
-    _["nb_inner_loop"] = BT.get_inner_loop_num()
+    _["nb_inner_loop"] = BT.get_inner_loop_num(),
+    _["converged"] =  BT.get_converged(),
+    _["kantorovich"] = BT.get_kantorovich()
   );
 
-}
+  }
 
 
 
