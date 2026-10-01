@@ -412,59 +412,30 @@ public:
 
 class orderedBlock {
 public:
+
+  vector<double> sol_ir;
   orderedBlock(int size, const vector<double>& y = vector<double>(), const vector<double>&w = vector<double>(), double delta = 1.0, std::string loss = "quadratic",
-               double eps = 0.0) // const vector<double>& sol_ir = vector<double>()
+               double eps = 0.0, const vector<double>& sol_ir = vector<double>()) // const vector<double>& sol_ir = vector<double>()
   : n(size), xl(y), calibrated_xl(y),weights(w.empty() ? vector<double>() : w), // Only copy if not empty
       weighted(!w.empty()),
       adj_internal(size),
       loss(loss),
+      loss_type(parse_loss(loss)), // if loss invalid --> exception
       delta(delta),
-      eps(eps)
-      // sol_ir(sol_ir)// Initialize here!
+      eps(eps),
+      sol_ir(sol_ir) // Initialize here!
   {
-    // if (eps > 0.0 && sol_ir.empty()) {
-    //   throw std::invalid_argument(
-    //       "orderedBlock: eps > 0 require an IR solution (sol_ir) non-empty for Tikhonov regularisation.");
-    // }
-    // n = size;
-    // xl.resize(n);
-    // calibrated_xl.resize(n);
-    // weights.resize(n);
-    // adj_internal.resize(n);
-    // weighted = !w.empty();
-
-    // if (w != NULL) {
-    //   weighted = true;
-    // }
-    // else {
-    //   weighted = false;
-    // }
-
-    // if (!y.empty()) {
-    //   xl = y;
-    //   calibrated_xl = y;
-
-    // }
-
-    // if (weighted) {
-    //   weights = w;
-    // }
-
-    // if (y != NULL) {
-    //   for (int i = 0;i < n;i++) {
-    //     xl[i] = y[i];
-    //     calibrated_xl[i] = y[i];
-    //   }
-    //   if (weighted) {
-    //     for (int i = 0;i < n;i++) {
-    //       weights[i] = w[i];
-    //     }
-    //   }
-    // }
-
-    // str_DAG = DAG();
+    if (loss_type == LossType::Huber) {
+      if (eps <= 0.0) {
+        throw std::invalid_argument("orderedBlock: eps must be >0 for huber loss");
+      }
+      if (!sol_ir.empty() && static_cast<int>(sol_ir.size()) !=n ) {
+        throw std::invalid_argument("orderedBlock: sol_ir must have the same length as y.");
+      }
+    }
     str_DAG.initialize(n);
   }
+
   // no destructor needed ! Everything auto-cleaned
   ~orderedBlock() = default;
   // ~orderedBlock() {
@@ -474,13 +445,8 @@ public:
 
   void load_chain_isotonic_str() {
     m = n - 1;
-    // E = new int* [m];
     E.resize(m, vector<int>(2));
 
-    // for (int i = 0;i < m;i++) {
-    //   E[i] = new int[2];
-    // }
-    // int E_count = 0;
 
     for (int i = 0;i < m;i++) {
       str_DAG.connect(i, i + 1);
@@ -490,21 +456,17 @@ public:
     }
   }
 
-  // int** E_mat, int m_input
+
   void load_isotonic_str_via_mats(const vector<vector<int>>& E_mat) {
 
     m = E_mat.size();
     E.resize(m, vector<int>(2));
-    // for (int i = 0;i < m;i++) {
-    //   E[i] = new int[2];
-    // }
+
 
     for (int i = 0;i < m;i++) {
       str_DAG.connect(E_mat[i][0], E_mat[i][1]);
       E[i][0] = E_mat[i][0];
       E[i][1] = E_mat[i][1];
-      //cout << E_mat[i][0] << " " << E_mat[i][1] << endl;
-      //cout << E[i][0] << " " << E[i][1] << endl;
     }
   }
 
@@ -575,24 +537,38 @@ public:
     }
   }
 
+
+  void ensure_tikhonov_origin() {
+    if (loss_type != LossType::Huber) return; // nothing to do
+    if (!sol_ir.empty()) {
+      return;
+      } // nothing to do
+    // no inst for origin
+    orderedBlock tmp(n, xl, weights, delta, "quadratic");
+    tmp.E = E;
+    tmp.El = El;
+    tmp.m = m;
+    tmp.str_DAG = str_DAG;
+    tmp.adj_internal = adj_internal;
+    tmp.solve_by_SBM();
+
+    sol_ir.resize(n);
+    tmp.get_x_calibrated(sol_ir);
+  }
+
+  //--------------------------------------- SBM SOLVER  -------------------
   void solve_by_SBM(bool remember_adj_gra = false) {
     outer_loop = 0;
     inner_loop = 0;
     n_bisection_fallback = 0;
     all_blocks_converged = true;
     calibrated_xl = xl;
-    // for (int i = 0;i < n;i++) {
-    //   calibrated_xl[i] = xl[i];
-    // }
 
-    // Adjacency_list* Adjacency_obj = new Adjacency_list(n);
-    // Instead of 'new', just reset the existing object
     if (!remember_adj_gra) {
 
       adj_internal.reset(n);
     }
     vector<double> Ax = compute_Ax();
-    // double* Ax = compute_Ax();
     //--------------------------------------- PART WHERE BLOCK VALUE AND BLOCK SET ARE DEFINED -------------------
     int min_pos = whichMin(Ax, m);
     double min_value = Ax[min_pos];
@@ -608,27 +584,30 @@ public:
       if (adj_internal.isEmpty(i) && adj_internal.isEmpty(j)) { // fresh merge and new block created
         adj_internal.connect(i, j);
         //cout << "Connecting " << i << "-" << j << endl;
-        if (loss == "quadratic") {
-
-        if (weighted) {
-          x_bar = (xl[i] * weights[i] + xl[j] * weights[j]) / (weights[i] + weights[j]);
-        }
-        else {
-          x_bar = 0.5 * (xl[i] + xl[j]);
+        switch (loss_type) {
+        case LossType::Quadratic: {
+          if (weighted) {
+            x_bar = (xl[i] * weights[i] + xl[j] * weights[j]) / (weights[i] + weights[j]);
           }
+          else {
+            x_bar = 0.5 * (xl[i] + xl[j]);
+          }
+          break;
         }
-        else if (loss == "smoothH") {
+        case LossType::SmoothH: {
           set<int> two_set = {i,j};
           x_bar = solve_block_newton(two_set);
           blocks_converged.push_back(get_block_converged() ? 1 : 0);
           kantorovich.push_back(get_kantorovich_certif());
-          // cout << "number of newton iteration " << get_iter_newton() << " : samples" << i << "-" << j << endl;
-          // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
+          break;
         }
-        else if (loss == "huber") {
+        case LossType::Huber: {
           set<int> two_set = {i,j};
           x_bar = solve_block_huber(two_set);
+          break;
         }
+        }
+
 
         calibrated_xl[i] = x_bar;
         calibrated_xl[j] = x_bar;
@@ -638,22 +617,24 @@ public:
         adj_internal.connect(i, j);
         // cout << "Connecting " << i << "-" << j << endl;
         block_set = adj_internal.compute_subgraph(i); // get all the index inside this block
-        if (loss == "quadratic") {
-        x_bar = get_x_bar(block_set);
-        }
-        else if (loss == "smoothH") {
+
+        switch (loss_type) {
+        case LossType::Quadratic:
+          x_bar = get_x_bar(block_set);
+          break;
+        case LossType::SmoothH: {
           x_bar = solve_block_newton(block_set);
           blocks_converged.push_back(get_block_converged() ? 1 : 0);
           kantorovich.push_back(get_kantorovich_certif());
-          // cout << "number of newton iteration  " << get_iter_newton() << endl;
-          // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
+          break;
         }
-
-        else if (loss == "huber") {
+        case LossType::Huber:
           x_bar = solve_block_huber(block_set);
+          break;
         }
 
 
+        // KKT
         local_lambda = solve_local_KKT(block_set, x_bar, El, &adj_internal);
         for (set<int>::iterator it = block_set.begin();it != block_set.end();it++) {
           calibrated_xl[*it] = x_bar;
@@ -668,24 +649,10 @@ public:
           current_nbo = block_set.size();
           solve_inner_loop(G_bar_index_set, local_lambda, &adj_internal);
         }
-        // for (int i = 0;i < block_set.size() - 1;i++) {
-        //   delete[]El[i];
-        // }
-        // delete[]El;
-        // delete[]local_lambda;
       }
       Compute_min_diff(min_value, min_pos, Ax);
     }
-    // if (remember_adj_gra) {
-    //   //Adjacency_obj.print();
-    //   if (warm_start_obj != NULL) {
-    //     delete warm_start_obj;
-    //   }
-    //   warm_start_obj = Adjacency_obj;
-    // }
-    // else {
-    //   delete Adjacency_obj;
-    // }
+
   }
 
   void solve_inner_loop(set<int> &inequality_indexset, vector<double>&lambda, Adjacency_list* Adjacency_obj) {
@@ -729,26 +696,26 @@ public:
       double x_bar_i = 0.0;
       double x_bar_j = 0.0;
 
-      if (loss == "quadratic") {
-
-       x_bar_i = get_x_bar(block_set_i);
-       x_bar_j = get_x_bar(block_set_j);
+      switch (loss_type) {
+      case LossType::Quadratic: {
+        x_bar_i = get_x_bar(block_set_i);
+        x_bar_j = get_x_bar(block_set_j);
+        break;
       }
-
-      else if (loss == "smoothH") {
+      case LossType::SmoothH: {
         x_bar_i = solve_block_newton(block_set_i);
         blocks_converged.push_back(get_block_converged() ? 1 : 0);
         kantorovich.push_back(get_kantorovich_certif());
         x_bar_j = solve_block_newton(block_set_j);
         blocks_converged.push_back(get_block_converged() ? 1 : 0);
         kantorovich.push_back(get_kantorovich_certif());
-        // cout << "number of newton iteration " << get_iter_newton() << endl;
-        // cout << "number of fallback into bisection" << get_bisection_fallback() << endl;
+        break;
       }
-
-      else if (loss == "huber") {
+      case LossType::Huber: {
         x_bar_i = solve_block_huber(block_set_i);
         x_bar_j = solve_block_huber(block_set_j);
+        break;
+      }
       }
 
       for (set<int>::iterator it = block_set_i.begin();it != block_set_i.end();it++) {
@@ -778,16 +745,20 @@ public:
         // int** l_El = new int* [subcurrent_set.size() - 1];
         vector<vector<int>> l_El(subcurrent_set.size() - 1, vector<int>(2, 0));
         double l_x_bar = 0.0;
-        if (loss == "quadratic") {
-        l_x_bar = get_x_bar(subcurrent_set);
-        }
-        else if (loss == "smoothH") {
+
+        switch (loss_type) {
+        case LossType::Quadratic:
+          l_x_bar = get_x_bar(subcurrent_set);
+          break;
+        case LossType::SmoothH: {
           l_x_bar = solve_block_newton(subcurrent_set);
           blocks_converged.push_back(get_block_converged() ? 1 : 0);
           kantorovich.push_back(get_kantorovich_certif());
+          break;
         }
-        else if (loss == "huber") {
+        case LossType::Huber:
           l_x_bar = solve_block_huber(subcurrent_set);
+          break;
         }
 
         vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
@@ -795,11 +766,7 @@ public:
         for (set<int>::iterator it = subcurrent_set.begin();it != subcurrent_set.end();it++) {
           calibrated_xl[*it] = l_x_bar;
         }
-        // for (int i = 0;i < subcurrent_set.size() - 1;i++) {
-        //   delete[]l_El[i];
-        // }
-        // delete[]l_El;
-        // delete[]l_local_lambda;
+
         is_still_primal_feasible = is_primal_feasible(El, current_nbo - 1, min_i, min_j);
       }
 
@@ -875,6 +842,10 @@ public:
     // }
   }
 
+  void get_sol_ir(vector<double>& x_to_write) const {
+    x_to_write = sol_ir;
+  }
+
   vector<vector<int>> get_partitions() {
       vector<vector<int>> partitions;
       // Keep track of which nodes we've already assigned to a block
@@ -901,9 +872,19 @@ public:
       return partitions;
   }
 
-
+  //--------------------------------------- PRIVATE PARAMETER -------------------
 private:
+  enum class LossType {Quadratic, SmoothH, Huber};
+  static LossType parse_loss(const std::string& loss_str) {
+    if (loss_str == "quadratic") return LossType::Quadratic;
+    if (loss_str == "smoothH") return LossType::SmoothH;
+    if (loss_str == "huber") return LossType::Huber;
+    throw std::invalid_argument(
+        "orderedBlock: unknown loss '" + loss_str + "' (expected 'quadratic', 'smoothH' or 'huber').");
+  }
+
   std::string loss;
+  LossType loss_type; //derive from loss
   int n; // number of node
   int m; // number of constraints or edges
   vector<double> xl; // data of every nodes
@@ -1127,11 +1108,11 @@ private:
     events.reserve(2 * n_block);
 
     double S = 0.0;
-    // double S_ir = 0.0;
+    double S_ir = 0.0;
     for (int idx : inactive_set) {
       const double w = weighted ? weights[idx] : 1.0;
       S += w;
-      // S_ir += w * sol_ir[idx];
+      S_ir += w * sol_ir[idx];
       events.push_back({xl[idx] - delta, w, xl[idx], true});
       events.push_back({xl[idx] + delta, w, xl[idx], false});
     }
@@ -1142,7 +1123,7 @@ private:
     double sigma_U = S , sigma_D = 0.0, sigma_M = 0.0, sigma_M_theta = 0.0;
 
     auto slope     = [&]() { return 2.0 * (sigma_M + eps * S); }; // fixed value S
-    auto intercept = [&]() { return -2.0 * delta * (sigma_U - sigma_D) - 2.0 * sigma_M_theta; }; // fixed value  S_ir -2*eps* S_ir
+    auto intercept = [&]() { return -2.0 * delta * (sigma_U - sigma_D) - 2.0 * sigma_M_theta -2*eps* S_ir; }; // fixed value  S_ir -2*eps* S_ir
 
     double theta_prev = events.front().pos - 1.0;
     double h_prev = intercept() + slope() * theta_prev;   // < 0 par construction
@@ -1236,12 +1217,12 @@ private:
     const double r = xl[i] - x_i;
     const double abs_r = std::fabs(r);
 
-    // clip(r, -delta, delta), avec garde contre la division par zero
+    // clip(r, -delta, delta)
     const double clipped = (abs_r > 1e-12)
       ? std::min(1.0, delta / abs_r) * r
     : 0.0;
 
-    const double grad = -2.0 * clipped + 2.0 * eps * x_i;
+    const double grad = -2.0 * clipped + 2.0 * eps * (x_i-sol_ir[i]);
 
     return weighted ? weights[i] * grad : grad;
   }
@@ -1264,27 +1245,12 @@ private:
     El.assign(nl, vector<int>(2, 0)); //initialization
     vector<double> bl(nl, 0.0);
     std::vector<int> temp_array(inactive_set.begin(), inactive_set.end());
-    // for (int i = 0;i < nl;i++) {
-    //   El[i] = new int[2];
-    //   Al[i] = new double[nl];
-    //   for (int j = 0;j < nl;j++) {
-    //     Al[i][j] = 0;
-    //   }
-    //   bl[i] = 0;
-    //   El[i][0] = 0;
-    //   El[i][1] = 0;
-    // }
+
     int count_El = 0;
-    // vector<int> temp_array(nl + 1);
-    // for (set<int>::iterator it = inactive_set.begin();it != inactive_set.end();it++) {
-    //   temp_array[count_El] = int(*it);
-    //   count_El++;
-    // }
+
     vector<int> row_abs_sum(nl, 0);
     vector<int> unique_col_index(nl);
-    // for (int i = 0;i < nl;i++) {
-    //   row_abs_sum[i] = 0;
-    // }
+
     count_El = 0;
     int ii, jj;
     for (int i = 0;i < inactive_set.size();i++) {
@@ -1425,27 +1391,38 @@ private:
   }
 };
 
+// helper to parse sol_ir
+inline vector<double> parse_sol_ir(Rcpp::Nullable<NumericVector> sol_ir_input, int n) {
+  if (sol_ir_input.isNull()) return vector<double>();
+  NumericVector v(sol_ir_input);
+  if (v.size() != n) {
+    Rcpp::stop("sol_ir must have length %d (got %d).", n, v.size());
+  }
+  return Rcpp::as<vector<double>>(v);
+}
+
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, double delta=1.0, std::string loss = "quadratic", double eps= 0.0) { //Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue
+Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input,
+                               double delta=1.0, std::string loss = "quadratic",
+                               double eps= 0.0,
+                               Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue) {
 
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
+  vector<double> sol_ir = parse_sol_ir(sol_ir_input, n);
 
-  orderedBlock BT(n, y, w, delta, loss, eps);
-
+  orderedBlock BT(n, y, w, delta, loss, eps, sol_ir);
   BT.load_chain_isotonic_str();
+  BT.ensure_tikhonov_origin();
   BT.solve_by_SBM();
 
   // vector<double> x_ordered(n);
   vector<double> x_calibrated(n);
   BT.get_x_calibrated(x_calibrated);
-  // for(int i = 0; i < n; i++) {
-  //   x_res[i] = x_ordered[i];
-  // }
-  // 2. Get the partitions
+
   vector<vector<int>> part_vec = BT.get_partitions();
 
   // 3. Convert C++ vector<vector> to R List
@@ -1469,39 +1446,23 @@ Rcpp::List solve_ordered_chain(NumericVector y_input, NumericVector w_input, dou
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta = 1.0, std::string loss = "quadratic", double eps = 0.0) {
+Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_input, double delta = 1.0,
+                                     std::string loss = "quadratic", double eps = 0.0,
+                                     Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
-  // vector<double> sol_ir;
-  //
-  // if (sol_ir_input.isNotNull()) {
-  //   // L'utilisateur fournit sa propre origine T_P(theta')
-  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
-  //   if (static_cast<int>(sol_ir.size()) != n) {
-  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
-  //                n, sol_ir.size());
-  //   }}
+  vector<double> sol_ir = parse_sol_ir(sol_ir_input, n);
 
-  // double* y = new double[n];
-  // double* w = new double[n];
-  // for(int i = 0; i < n; i++) {
-  //   y[i] = y_input[i];
-  //   w[i] = w_input[i];
-  // }
-  orderedBlock BT(n, y, w, delta, loss, eps);
+  orderedBlock BT(n, y, w, delta, loss, eps, sol_ir);
   BT.load_tree_isotonic_str();
+  BT.ensure_tikhonov_origin();
   BT.solve_by_SBM();
 
-  // double* x_ordered = new double[n];
-  // NumericVector x_res(n);
   vector<double> x_calibrated(n);
   BT.get_x_calibrated(x_calibrated);
-  // for(int i = 0; i < n; i++) {
-  //   x_res[i] = x_ordered[i];
-  // }
-  // 2. Get the partitions
+
   vector<vector<int>> part_vec = BT.get_partitions();
 
   // 3. Convert C++ vector<vector> to R List
@@ -1523,35 +1484,22 @@ Rcpp::List solve_ordered_binary_tree(NumericVector y_input, NumericVector w_inpu
   }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta, std::string loss, double eps) {
+Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, double delta = 1.0,
+                                 std::string loss = "quadratic",
+                                 double eps = 0.0,  Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
-  // vector<double> sol_ir;
-  //
-  // if (sol_ir_input.isNotNull()) {
-  //   // L'utilisateur fournit sa propre origine T_P(theta')
-  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
-  //   if (static_cast<int>(sol_ir.size()) != n) {
-  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
-  //                n, sol_ir.size());
-  //   }}
-  // for(int i = 0; i < n; i++) {
-  //   y[i] = y_input[i];
-  //   w[i] = w_input[i];
-  // }
-  orderedBlock BT(n, y, w, delta, loss, eps);
+  vector<double> sol_ir = parse_sol_ir(sol_ir_input, n);
+  orderedBlock BT(n, y, w, delta, loss, eps, sol_ir);
   BT.load_2D_isotonic_str();
+  BT.ensure_tikhonov_origin();
   BT.solve_by_SBM();
 
-  // double* x_ordered = new double[n];
-  // NumericVector x_res(n);
   vector<double> x_calibrated(n);
   BT.get_x_calibrated(x_calibrated);
-  // for(int i = 0; i < n; i++) {
-  //   x_res[i] = x_ordered[i];
-  // }
+
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();
 
@@ -1574,30 +1522,22 @@ Rcpp::List solve_ordered_2d_grid(NumericVector y_input, NumericVector w_input, d
   }
 
 // [[Rcpp::export]]
-Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input, double delta, std::string loss, double eps) {
+Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_input, NumericMatrix E_mat_input,
+                                       double delta = 1.0, std::string loss = "quadratic",
+                                       double eps = 0.0,
+                                       Rcpp::Nullable<NumericVector> sol_ir_input = R_NilValue) {
   int n = y_input.size();
   // Convert Rcpp vectors to standard C++ vectors
   vector<double> y = Rcpp::as<vector<double>>(y_input);
   vector<double> w = Rcpp::as<vector<double>>(w_input);
-  // vector<double> sol_ir;
-  //
-  // if (sol_ir_input.isNotNull()) {
-  //   // L'utilisateur fournit sa propre origine T_P(theta')
-  //   sol_ir = Rcpp::as<vector<double>>(NumericVector(sol_ir_input));
-  //   if (static_cast<int>(sol_ir.size()) != n) {
-  //     Rcpp::stop("sol_ir must have the same length as y (%d expected, %d given).",
-  //                n, sol_ir.size());
-  //   }}
-  // for(int i = 0; i < n; i++) {
-  //   y[i] = y_input[i];
-  //   w[i] = w_input[i];
-  // }
-  orderedBlock BT(n, y, w, delta, loss, eps);
+  vector<double> sol_ir = parse_sol_ir(sol_ir_input, n);
+
+  orderedBlock BT(n, y, w, delta, loss, eps, sol_ir);
 
   int m = E_mat_input.nrow();
   vector<vector<int>> E_mat(m, vector<int>(2, 0));
   for(int i=0;i<m;i++) {
-    // E_mat[i] = new int[2]; no need
+
     E_mat[i][0] = int(E_mat_input(i,0));
     E_mat[i][1] = int(E_mat_input(i,1));
     //cout << E_mat[i][0] << " " << E_mat[i][1] << endl;
@@ -1605,17 +1545,12 @@ Rcpp::List solve_ordered_arbitrary_DAG(NumericVector y_input, NumericVector w_in
   //cout << m << endl;
 
   BT.load_isotonic_str_via_mats(E_mat);
-  //BT->print_E();
+  BT.ensure_tikhonov_origin();
   BT.solve_by_SBM();
 
-  // double* x_ordered = new double[n];
-  // NumericVector x_res(n);
   vector<double> temp_res(n);
   BT.get_x_calibrated(temp_res);
-  // for(int i = 0; i < n; i++) {
-  //   x_res[i] = x_ordered[i];
-  // }
-  // return(x_res);
+
 
   // 2. Get the partitions
   vector<vector<int>> part_vec = BT.get_partitions();

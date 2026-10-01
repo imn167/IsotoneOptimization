@@ -28,7 +28,7 @@
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic") {
+solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic", eps = 1e-7, sol_ir = NULL) {
   # error control
   if (!is.null(w)) {
     if (min(w) < 0) {
@@ -41,7 +41,7 @@ solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic")
   else {
     w <- rep(1, length(y))
   }
-  return(solve_ordered_binary_tree(y, w, delta, loss))
+  return(solve_ordered_binary_tree(y, w, delta, loss, eps, sol_ir))
 }
 
 
@@ -74,7 +74,7 @@ solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic")
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic") {
+solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic", eps = 1e-7, sol_ir = NULL) {
   # error control
   if (!is.null(w)) {
     if (min(w) < 0) {
@@ -87,7 +87,7 @@ solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic") {
   else {
     w <- rep(1, length(y))
   }
-  return(solve_ordered_2d_grid(y, w, delta, loss))
+  return(solve_ordered_2d_grid(y, w, delta, loss, eps, sol_ir))
 }
 
 
@@ -121,7 +121,7 @@ solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic") {
 #' @useDynLib IsotoneOptimization
 #' @importFrom Rcpp sourceCpp
 #' @export
-solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic", eps = 1e-7) {
+solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic", eps = 1e-7, sol_ir = NULL) {
   # error control
   if (!is.null(w)) {
     if (min(w) < 0) {
@@ -134,5 +134,5 @@ solve_isotone_chain <- function(y, w = NULL, delta = 1, loss = "quadratic", eps 
   else {
     w <- rep(1, length(y))
   }
-  return(solve_ordered_chain(y, w, delta, loss, eps))
+  return(solve_ordered_chain(y, w, delta, loss, eps, sol_ir))
 }
