@@ -425,7 +425,7 @@ public:
       eps(eps),
       sol_ir(sol_ir) // Initialize here!
   {
-    if (loss_type == LossType::Huber) {
+    if (loss_type == LossType::Huber || loss_type == LossType::MBL) {
       if (eps <= 0.0) {
         throw std::invalid_argument("orderedBlock: eps must be >0 for huber loss");
       }
@@ -539,7 +539,7 @@ public:
 
 
   void ensure_tikhonov_origin() {
-    if (loss_type != LossType::Huber) return; // nothing to do
+    if (loss_type != LossType::Huber && loss_type != LossType::MBL) return; // nothing to do
     if (!sol_ir.empty()) {
       return;
       } // nothing to do
@@ -548,8 +548,9 @@ public:
     tmp.E = E;
     tmp.El = El;
     tmp.m = m;
-    tmp.str_DAG = str_DAG;
-    tmp.adj_internal = adj_internal;
+    for (int k = 0; k < m; k++) {
+      tmp.str_DAG.connect(E[k][0], E[k][1]);
+    }
     tmp.solve_by_SBM();
 
     sol_ir.resize(n);
@@ -606,6 +607,11 @@ public:
           x_bar = solve_block_huber(two_set);
           break;
         }
+        case LossType::MBL: {
+          set<int> two_set = {i,j};
+          x_bar = solve_block_mbl(two_set);
+          break;
+        }
         }
 
 
@@ -630,6 +636,9 @@ public:
         }
         case LossType::Huber:
           x_bar = solve_block_huber(block_set);
+          break;
+        case LossType::MBL:
+          x_bar = solve_block_mbl(block_set);
           break;
         }
 
@@ -716,6 +725,12 @@ public:
         x_bar_j = solve_block_huber(block_set_j);
         break;
       }
+
+      case LossType::MBL: {
+        x_bar_i = solve_block_mbl(block_set_i);
+        x_bar_j = solve_block_mbl(block_set_j);
+        break;
+      }
       }
 
       for (set<int>::iterator it = block_set_i.begin();it != block_set_i.end();it++) {
@@ -759,6 +774,8 @@ public:
         case LossType::Huber:
           l_x_bar = solve_block_huber(subcurrent_set);
           break;
+        case LossType::MBL:
+          l_x_bar = solve_block_mbl(subcurrent_set);
         }
 
         vector<double> l_local_lambda = solve_local_KKT(subcurrent_set, l_x_bar, l_El, Adjacency_obj);
@@ -874,13 +891,14 @@ public:
 
   //--------------------------------------- PRIVATE PARAMETER -------------------
 private:
-  enum class LossType {Quadratic, SmoothH, Huber};
+  enum class LossType {Quadratic, SmoothH, Huber, MBL};
   static LossType parse_loss(const std::string& loss_str) {
     if (loss_str == "quadratic") return LossType::Quadratic;
     if (loss_str == "smoothH") return LossType::SmoothH;
     if (loss_str == "huber") return LossType::Huber;
+    if (loss_str == "mbl") return LossType::MBL;
     throw std::invalid_argument(
-        "orderedBlock: unknown loss '" + loss_str + "' (expected 'quadratic', 'smoothH' or 'huber').");
+        "orderedBlock: unknown loss '" + loss_str + "' (expected 'quadratic', 'smoothH', 'mbl' or 'huber').");
   }
 
   std::string loss;
@@ -1154,6 +1172,70 @@ private:
     return theta_prev - h_prev / s;
   }
 
+  double solve_block_mbl(const std::set<int>& inactive_set) const {
+    struct BreakEvent {
+      double pos;          // theta'_i - delta ou theta'_i + delta
+      double w;
+      double theta_prime;
+      bool is_entry;       // true: entree dans M (U->M), false: sortie de M (M->D)
+    };
+
+    const int n_block = static_cast<int>(inactive_set.size());
+
+    if (n_block == 0) {
+      throw std::runtime_error("solve_block_mbl: inactive_set empty");
+    }
+
+    std::vector<BreakEvent> events;
+    events.reserve(2 * n_block);
+
+    double S = 0.0;
+    double S_ir = 0.0;
+    for (int idx : inactive_set) {
+      const double w = weighted ? weights[idx] : 1.0;
+      S += w;
+      S_ir += w * sol_ir[idx];
+      events.push_back({xl[idx] - delta / (2*w), w, xl[idx], true});
+      events.push_back({xl[idx] + delta /(2*w), w, xl[idx], false});
+    }
+
+    std::sort(events.begin(), events.end(),
+              [](const BreakEvent& a, const BreakEvent& b) { return a.pos < b.pos; });
+
+    double sigma_U = n_block , sigma_D = 0.0, sigma_M = 0.0, sigma_M_theta = 0.0;
+
+    auto slope     = [&]() { return 2.0 * (sigma_M + eps * S); }; // fixed value S
+    auto intercept = [&]() { return -delta * (sigma_U - sigma_D) - 2.0 * sigma_M_theta -2*eps* S_ir; }; // fixed value  S_ir -2*eps* S_ir
+
+    double theta_prev = events.front().pos - 1.0;
+    double h_prev = intercept() + slope() * theta_prev;   // < 0 par construction
+
+    for (const auto& ev : events) {
+      const double s = slope();
+      const double candidate = theta_prev - h_prev / s;
+
+      if (candidate <= ev.pos) {
+        return candidate;
+      }
+
+      h_prev = intercept() + slope() * ev.pos;
+      theta_prev = ev.pos;
+
+      if (ev.is_entry) {
+        sigma_U -= 1;
+        sigma_M += ev.w;
+        sigma_M_theta += ev.w * ev.theta_prime;
+      } else {
+        sigma_M -= ev.w;
+        sigma_M_theta -= ev.w * ev.theta_prime;
+        sigma_D += 1;
+      }
+    }
+
+    const double s = slope();
+    return theta_prev - h_prev / s;
+  }
+
   double get_x_bar(const set<int>& inactive_set) {
     double x_bar = 0.0;
     if (weighted) {
@@ -1227,6 +1309,20 @@ private:
     return weighted ? weights[i] * grad : grad;
   }
 
+  double partial_mbl(int i, double x_i) const {
+    const double r = xl[i] - x_i;
+    const double abs_r = std::fabs(r);
+    const double w = weighted ? weights[i] : 1.0;
+
+    const double clipped = (abs_r > 1e-12)
+      ? std::min(1.0, delta / (2.0 * w * abs_r)) * r
+    : 0.0;
+
+    const double grad = -2.0 * clipped + 2.0 * eps * (x_i - sol_ir[i]);
+
+    return w * grad;
+  }
+
   void updata_local_lamdba(vector<double>& big_local_lambda, vector<vector<int>>& El_big, vector<double>& small_local_lambda, vector<vector<int>>& El_small, int small_n) {
     int countEl;
     for (int ii = 0; ii < small_n;ii++) {
@@ -1290,6 +1386,10 @@ private:
 
         else if (loss == "huber") {
           bl[count_eq] = -partial_huber(*it, x_bar);
+        }
+
+        else if (loss== "mbl") {
+          bl[count_eq] = -partial_mbl(*it, x_bar);
         }
         count_eq++;
       }

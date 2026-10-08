@@ -54,7 +54,7 @@ solve_isotone_DAG <- function(y, w = rep(1, length(y)), Emat, delta = 1, loss = 
     }
   }
 
-  if (!(loss %in% c("quadratic", "smoothH", "huber"))) stop("accepted loss are L2 or log-cosh")
+  if (!(loss %in% c("quadratic", "smoothH", "huber", "mbl"))) stop("accepted loss are quadratic, huber, mbl or smoothH")
   return(solve_ordered_arbitrary_DAG(y, w, Emat - 1, delta, loss, eps, sol_ir))
 }
 
