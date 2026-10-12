@@ -4,7 +4,14 @@
 \alias{solve_isotone_binary_tree}
 \title{Isotonic Regression with binary-tree-ordered isotonic constraints}
 \usage{
-solve_isotone_binary_tree(y, w = NULL, delta = 1, loss = "quadratic")
+solve_isotone_binary_tree(
+  y,
+  w = NULL,
+  delta = 1,
+  loss = "quadratic",
+  eps = 1e-07,
+  sol_ir = NULL
+)
 }
 \arguments{
 \item{y}{data vector}
@@ -14,10 +21,26 @@ solve_isotone_binary_tree(y, w = NULL, delta = 1, loss = "quadratic")
 \item{delta}{hyperparameter if method == "smoothH"}
 
 \item{loss}{type of loss wanted (either "quadratic" which is the isotonic regression or "smoothH" a smooth version of Huber loss)}
+
+\item{eps}{Numeric value greater than zero (default: 1e-7).
+Tikhonov regularization parameter that ensures a unique solution
+to the optimization problem.}
+
+\item{sol_ir}{Isotonic regression solution used as the Tikhonov
+regularization center, allowing the optimization problem to be
+formulated as a projection.}
 }
 \value{
 A list containing the following elements:
-\item{\code{x_ordered}}{Optimal solution that satisfies the .}
+\item{\code{x}}{Optimal solution satisfying the constraints.}
+\item{\code{blocks}}{Optimal partition of the solution satisfying the constraints.}
+\item{\code{nb_outer_loop}}{Number of outer iterations required to solve the optimization problem (OP).}
+\item{\code{nb_inner_loop}}{Number of inner iterations required to solve the optimization problem (OP).}
+\item{\code{converged}}{For \code{loss = "smoothH"}, a logical vector indicating whether the optimization
+converged for each aggregated block. Its length equals the number of aggregated blocks. Otherwise, \code{NULL}.}
+\item{\code{kantorovich}}{For \code{loss = "smoothH"}, a logical vector indicating whether the block
+solution satisfies the convergence criterion based on the Kantorovich method. Its length equals the number
+of aggregated blocks. Otherwise, \code{NULL}.}
 }
 \description{
 Isotonic Regression with binary-tree-ordered isotonic constraints

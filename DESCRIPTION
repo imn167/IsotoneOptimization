@@ -4,7 +4,8 @@ Version: 0.0.0.9000
 Authors@R: c(
   person(c("Daniel", "P."), "Palomar", role = c("cre", "aut"), email = "daniel.p.palomar@gmail.com"),
   person("Xiwen", "Wang", role = "aut", email = "xwangew@connect.ust.hk"),
-  person("Ze", "Vinicius", role = "aut", email = "jvmirca@gmail.com")
+  person("Ze", "Vinicius", role = "aut", email = "jvmirca@gmail.com"), 
+  person("Imène", "Bouafia", role = "aut", email = "imene.bouafia@univ-nantes.fr")
   )
 Description: The package implements the Sequential Block Merging (SBM) algorithm for solving isotonic regression 
     unde isotonic constraints that can be represented by an arbitrary directed acyclic graph (DAG).
@@ -24,6 +25,7 @@ Suggests:
     rmarkdown,
     R.rsp,
     testthat (>= 3.0.0),
-    viridisLite
+    viridisLite,
+    prettydoc
 VignetteBuilder: knitr
 Config/testthat/edition: 3
