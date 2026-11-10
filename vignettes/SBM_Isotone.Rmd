@@ -1,5 +1,5 @@
 ---
-title: "Sequential Block Merging Algorithm for General Isotone Optimization"
+title: "Sequential Block Merging Algorithm for General Isotone Optimization Under Quadratic Loss"
 author: |
   | Xiwen Wang and Daniel P. Palomar
   | The Hong Kong University of Science and Technology (HKUST)

@@ -1034,10 +1034,11 @@ private:
       }
     };
 
-    //  Newton-Kantorovich certificate at the median start --- NOT SURE NECESSARY
+    // initialize the numerator and denomenator when theta = median(theta'_i ; i in B_o)
     double S1_0, S2_0;
     eval(z, S1_0, S2_0);
 
+    // Kantorovich certificate h 
     if (S2_0 >= eps_S2) {
       const double K     = (4.0 * W) / (3.0 * std::sqrt(3.0) * delta);
       const double beta0 = 1.0 / (2.0 * S2_0);
@@ -1046,6 +1047,7 @@ private:
       certified = (h0 <= 0.5);
     }
 
+    
       double S1 = S1_0, S2 = S2_0;
       for (int iter = 0; iter < max_iter; ++iter) {
         iter_newton += 1;

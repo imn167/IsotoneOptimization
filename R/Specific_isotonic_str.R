@@ -17,7 +17,7 @@
 #'@param eps Numeric value greater than zero (default: 1e-7).
 #'   Tikhonov regularization parameter that ensures a unique solution
 #'   to the optimization problem.
-#' @param sol_ir Isotonic regression solution used as the Tikhonov
+#' @param sol_ir  (default is NULL) Isotonic regression solution used as the Tikhonov
 #'   regularization center, allowing the optimization problem to be
 #'   formulated as a projection.
 #' @return A list containing the following elements:
@@ -77,9 +77,9 @@ solve_isotone_binary_tree <- function(y, w = NULL, delta = 1, loss= "quadratic",
 #' @param eps Numeric value greater than zero (default: 1e-7).
 #'   Tikhonov regularization parameter that ensures a unique solution
 #'   to the optimization problem.
-#' @param sol_ir Isotonic regression solution used as the Tikhonov
+#' @param sol_ir  (default is NULL) Isotonic regression solution used as the Tikhonov
 #'   regularization center, allowing the optimization problem to be
-#'   formulated as a projection.
+#'   formulated as a projection. (If NULL, the solution is calculated within the optimization solver)
 #'
 #' @return A list containing the following elements:
 #' \item{\code{x}}{Optimal solution satisfying the constraints.}
@@ -137,7 +137,7 @@ solve_isotone_2d_grid <- function(y, w = NULL, delta = 1, loss = "quadratic", ep
 #' @param eps Numeric value greater than zero (default: 1e-7).
 #'   Tikhonov regularization parameter that ensures a unique solution
 #'   to the optimization problem.
-#' @param sol_ir Isotonic regression solution used as the Tikhonov
+#' @param sol_ir  (default is NULL) Isotonic regression solution used as the Tikhonov
 #'   regularization center, allowing the optimization problem to be
 #'   formulated as a projection.
 #'

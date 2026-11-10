@@ -26,9 +26,9 @@ solve_isotone_2d_grid(
 Tikhonov regularization parameter that ensures a unique solution
 to the optimization problem.}
 
-\item{sol_ir}{Isotonic regression solution used as the Tikhonov
+\item{sol_ir}{(default is NULL) Isotonic regression solution used as the Tikhonov
 regularization center, allowing the optimization problem to be
-formulated as a projection.}
+formulated as a projection. (If NULL, the solution is calculated within the optimization solver)}
 }
 \value{
 A list containing the following elements:

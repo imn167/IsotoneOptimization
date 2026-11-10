@@ -30,7 +30,7 @@ version of Huber loss)}
 Tikhonov regularization parameter that ensures a unique solution
 to the optimization problem.}
 
-\item{sol_ir}{Isotonic regression solution used as the Tikhonov
+\item{sol_ir}{(Default is NULL) Isotonic regression solution used as the Tikhonov
 regularization center, allowing the optimization problem to be
 formulated as a projection.}
 }

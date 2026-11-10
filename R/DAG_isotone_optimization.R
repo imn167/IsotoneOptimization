@@ -18,7 +18,7 @@
 #' @param eps Numeric value greater than zero (default: 1e-7).
 #'   Tikhonov regularization parameter that ensures a unique solution
 #'   to the optimization problem.
-#' @param sol_ir Isotonic regression solution used as the Tikhonov
+#' @param sol_ir (Default is NULL) Isotonic regression solution used as the Tikhonov
 #'   regularization center, allowing the optimization problem to be
 #'   formulated as a projection.
 #' @return A list containing the following elements:
