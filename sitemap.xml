@@ -1,0 +1,14 @@
+<urlset xmlns = 'http://www.sitemaps.org/schemas/sitemap/0.9'>
+<url><loc>/404.html</loc></url>
+<url><loc>/articles/SBM_Huber.html</loc></url>
+<url><loc>/articles/SBM_Isotone.html</loc></url>
+<url><loc>/articles/index.html</loc></url>
+<url><loc>/authors.html</loc></url>
+<url><loc>/index.html</loc></url>
+<url><loc>/reference/index.html</loc></url>
+<url><loc>/reference/solve_isotone_2d_grid.html</loc></url>
+<url><loc>/reference/solve_isotone_DAG.html</loc></url>
+<url><loc>/reference/solve_isotone_binary_tree.html</loc></url>
+<url><loc>/reference/solve_isotone_chain.html</loc></url>
+</urlset>
+

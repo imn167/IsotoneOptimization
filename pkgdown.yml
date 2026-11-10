@@ -1,0 +1,7 @@
+pandoc: 3.8.3
+pkgdown: 2.2.1
+pkgdown_sha: ~
+articles:
+  SBM_Huber: SBM_Huber.html
+  SBM_Isotone: SBM_Isotone.html
+last_built: 2026-11-10T14:31Z
